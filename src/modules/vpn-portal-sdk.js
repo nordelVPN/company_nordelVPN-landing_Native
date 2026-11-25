@@ -521,9 +521,9 @@ class VpnPortalSDK {
       brand: this.brandSlug,
       default_provider: 'stripe',
       providers: [
-        { code: 'stripe', label: 'Bank Card (Stripe)', methods: ['card', 'apple_pay', 'google_pay'] },
-        { code: 'paddle', label: 'Paddle', methods: ['card', 'paypal'] },
-        { code: 'nowpay', label: 'NowPay', methods: ['nowpay'] },
+        { code: 'stripe', label: 'Bank Card (Stripe)', methods: ['card', 'apple_pay', 'google_pay'], enabled: true },
+        { code: 'paddle', label: 'Paddle', methods: ['card', 'paypal'], enabled: false },
+        { code: 'nowpay', label: 'NowPay', methods: ['nowpay'], enabled: false },
       ],
     };
   }
@@ -917,6 +917,29 @@ function renderLiveServersStrip(container, servers) {
   });
 }
 
+const PROVIDER_UI_I18N = {
+  en: { label: 'Payment method', soon: 'Soon' },
+  ru: { label: 'Способ оплаты', soon: 'Скоро' },
+  pl: { label: 'Metoda płatności', soon: 'Wkrótce' },
+  uk: { label: 'Спосіб оплати', soon: 'Незабаром' },
+  lt: { label: 'Mokėjimo būdas', soon: 'Netrukus' },
+  tr: { label: 'Ödeme yöntemi', soon: 'Yakında' },
+  ro: { label: 'Metodă de plată', soon: 'În curând' },
+  de: { label: 'Zahlungsmethode', soon: 'Bald' },
+  sk: { label: 'Spôsob platby', soon: 'Čoskoro' },
+  hr: { label: 'Način plaćanja', soon: 'Uskoro' },
+  sr: { label: 'Način plaćanja', soon: 'Uskoro' },
+  bg: { label: 'Метод на плащане', soon: 'Скоро' },
+  hu: { label: 'Fizetési mód', soon: 'Hamarosan' },
+};
+
+function getProviderUiText() {
+  const lang = (typeof document !== 'undefined' && document.documentElement && document.documentElement.lang
+    ? document.documentElement.lang.slice(0, 2).toLowerCase()
+    : 'en');
+  return PROVIDER_UI_I18N[lang] || PROVIDER_UI_I18N.en;
+}
+
 async function mountPaymentProviderSelector(sdk, container) {
   if (!container) return null;
   let data;
@@ -928,42 +951,74 @@ async function mountPaymentProviderSelector(sdk, container) {
   const providers = Array.isArray(data?.providers) ? data.providers : [];
   if (providers.length === 0) return null;
 
-  const defaultCode = data?.default_provider || providers[0].code;
-  container.innerHTML = '';
+  const isEnabled = (p) => p && p.enabled !== false;
+  const enabledProviders = providers.filter(isEnabled);
+  const defaultCode = (data?.default_provider && enabledProviders.some((p) => p.code === data.default_provider))
+    ? data.default_provider
+    : (enabledProviders[0]?.code || providers[0].code);
 
-  const fieldset = document.createElement('fieldset');
-  fieldset.className = 'payment-providers__group';
-  fieldset.style.cssText = 'border:0;padding:0;margin:12px 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center;';
+  const render = () => {
+    const ui = getProviderUiText();
+    const prevChecked = container.querySelector('input[name="payment_provider"]:checked')?.value || defaultCode;
+    container.innerHTML = '';
 
-  const legend = document.createElement('legend');
-  legend.className = 'payment-providers__legend';
-  legend.style.cssText = 'font-size:0.875rem;font-weight:600;margin-bottom:6px;width:100%;';
-  legend.textContent = container.getAttribute('data-provider-label') || 'Payment method';
-  fieldset.appendChild(legend);
+    const fieldset = document.createElement('fieldset');
+    fieldset.className = 'payment-providers__group';
+    fieldset.style.cssText = 'border:0;padding:0;margin:12px 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center;';
 
-  providers.forEach((p, idx) => {
-    const label = document.createElement('label');
-    label.className = 'payment-provider-option';
-    label.style.cssText = 'display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid currentColor;border-radius:8px;cursor:pointer;font-size:0.875rem;';
+    const legend = document.createElement('legend');
+    legend.className = 'payment-providers__legend';
+    legend.style.cssText = 'font-size:0.875rem;font-weight:600;margin-bottom:6px;width:100%;';
+    legend.textContent = container.getAttribute('data-provider-label') || ui.label;
+    fieldset.appendChild(legend);
 
-    const input = document.createElement('input');
-    input.type = 'radio';
-    input.name = 'payment_provider';
-    input.value = p.code;
-    input.checked = p.code === defaultCode || (idx === 0 && !defaultCode);
+    providers.forEach((p) => {
+      const enabled = isEnabled(p);
+      const label = document.createElement('label');
+      label.className = 'payment-provider-option' + (enabled ? '' : ' is-disabled');
+      label.setAttribute('data-provider-code', p.code);
+      label.setAttribute('data-provider-enabled', enabled ? 'true' : 'false');
+      if (!enabled) label.setAttribute('aria-disabled', 'true');
+      label.style.cssText = enabled
+        ? 'display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid currentColor;border-radius:8px;cursor:pointer;font-size:0.875rem;'
+        : 'display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px dashed currentColor;border-radius:8px;cursor:not-allowed;opacity:0.55;font-size:0.875rem;';
 
-    const span = document.createElement('span');
-    span.textContent = p.label || formatPaymentProvider(p.code);
+      const input = document.createElement('input');
+      input.type = 'radio';
+      input.name = 'payment_provider';
+      input.value = p.code;
+      input.disabled = !enabled;
+      input.checked = enabled && p.code === prevChecked;
 
-    label.appendChild(input);
-    label.appendChild(span);
-    fieldset.appendChild(label);
-  });
+      const span = document.createElement('span');
+      span.textContent = p.label || formatPaymentProvider(p.code);
 
-  container.appendChild(fieldset);
-  container.hidden = false;
+      label.appendChild(input);
+      label.appendChild(span);
+
+      if (!enabled) {
+        const badge = document.createElement('small');
+        badge.className = 'payment-provider-option__badge';
+        badge.style.cssText = 'font-size:0.75em;opacity:0.85;padding:1px 6px;border-radius:999px;border:1px solid currentColor;';
+        badge.textContent = ui.soon;
+        label.appendChild(badge);
+      }
+
+      fieldset.appendChild(label);
+    });
+
+    container.appendChild(fieldset);
+    container.hidden = false;
+  };
+
+  render();
+  if (typeof document !== 'undefined' && !container.__vpnProviderLangBound) {
+    container.__vpnProviderLangBound = true;
+    document.addEventListener('languagechange', render);
+  }
+
   return () => {
-    const checked = container.querySelector('input[name="payment_provider"]:checked');
+    const checked = container.querySelector('input[name="payment_provider"]:checked:not(:disabled)');
     return checked ? checked.value : defaultCode;
   };
 }
