@@ -1,4 +1,4 @@
-/* global navigator */
+/* global navigator, URLSearchParams */
 'use strict';
 
 var sdkFactory = require('./vpn-portal-sdk');
@@ -14,6 +14,36 @@ function setStatus(el, msg, isError) {
 function maskKey(key) {
   if (!key || key.length < 12) return '••••••••';
   return key.slice(0, 10) + '••••••••••••' + key.slice(-4);
+}
+
+function formatEur(minor) {
+  var euros = (minor || 0) / 100;
+  return '€' + (Number.isInteger(euros) ? String(euros) : euros.toFixed(2));
+}
+
+function initLandingLiveFeed() {
+  if (sdk.mode !== 'live') return;
+  var pricing = document.querySelector('#pricing');
+  if (!pricing) return;
+
+  sdk.getPublicPlans().then(function (res) {
+    var plans = (res && res.plans) || [];
+    var cards = pricing.querySelectorAll('.plan');
+    plans.forEach(function (plan, idx) {
+      var card = cards[idx];
+      if (!card) return;
+      var strong = card.querySelector('.plan-price strong');
+      if (strong) strong.textContent = formatEur(plan.price_minor);
+      var btn = card.querySelector('button');
+      if (btn) btn.setAttribute('data-checkout-plan', plan.plan_code);
+    });
+  }).catch(function () { /* keep static fallback */ });
+
+  sdk.getPublicServersCatalog().then(function (res) {
+    var servers = (res && (res.servers || res.locations || res.data)) || [];
+    if (!servers.length) return;
+    pricing.setAttribute('data-live-servers-count', String(servers.length));
+  }).catch(function () { /* optional */ });
 }
 
 function initLoginForm() {
@@ -68,16 +98,63 @@ function initRegisterForm() {
   });
 }
 
-function initForgotForm() {
-  var form = document.querySelector('[data-portal-forgot]');
-  if (!form) return;
-  var statusEl = form.querySelector('[data-portal-status]');
-  form.addEventListener('submit', function (e) {
+function initForgotAndResetForms() {
+  var forgotForm = document.querySelector('[data-portal-forgot]');
+  var resetForm = document.querySelector('[data-portal-reset]');
+  var params = new URLSearchParams(window.location.search || '');
+  var token = params.get('token');
+
+  if (token && resetForm) {
+    if (forgotForm) forgotForm.hidden = true;
+    resetForm.hidden = false;
+    resetForm.token.value = token;
+    var rStatus = resetForm.querySelector('[data-portal-status]');
+    resetForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (resetForm.password.value !== resetForm.password_confirmation.value) {
+        setStatus(rStatus, 'Passwords do not match.', true);
+        return;
+      }
+      sdk.resetPassword({
+        token: resetForm.token.value,
+        password: resetForm.password.value,
+        password_confirmation: resetForm.password_confirmation.value
+      }).then(function () {
+        setStatus(rStatus, 'Password updated. Redirecting to sign in...', false);
+        window.location.href = './login.html';
+      }).catch(function (err) {
+        setStatus(rStatus, err.message || 'Reset failed.', true);
+      });
+    });
+    return;
+  }
+
+  if (!forgotForm) return;
+  var statusEl = forgotForm.querySelector('[data-portal-status]');
+  forgotForm.addEventListener('submit', function (e) {
     e.preventDefault();
-    sdk.forgotPassword(form.email.value.trim()).then(function (res) {
+    sdk.forgotPassword(forgotForm.email.value.trim()).then(function (res) {
       setStatus(statusEl, (res && res.message) || 'If an account exists, reset instructions have been sent.', false);
     }).catch(function (err) {
       setStatus(statusEl, err.message || 'Request failed.', true);
+    });
+  });
+}
+
+function initCheckoutAction() {
+  document.addEventListener('click', function (e) {
+    var btn = e.target && e.target.closest && e.target.closest('[data-checkout-plan]');
+    if (!btn || sdk.mode !== 'live') return;
+    if (!sdk.isAuthenticated()) {
+      window.location.href = './login.html';
+      return;
+    }
+    e.preventDefault();
+    var planCode = btn.getAttribute('data-checkout-plan');
+    sdk.checkout({ plan_code: planCode }).then(function () {
+      window.location.href = './account.html';
+    }).catch(function () {
+      window.location.href = './account.html';
     });
   });
 }
@@ -287,7 +364,9 @@ function initAccountPage() {
   }
 }
 
+initLandingLiveFeed();
+initCheckoutAction();
 initLoginForm();
 initRegisterForm();
-initForgotForm();
+initForgotAndResetForms();
 initAccountPage();

@@ -1,5 +1,7 @@
+/* global process */
 const path = require('path');
 const fs = require('fs');
+const webpack = require('webpack');
 const Handlebars = require('handlebars');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
@@ -100,6 +102,15 @@ module.exports = (env, argv) => {
       ]
     },
     plugins: [
+      new webpack.DefinePlugin({
+        __VPN_BUILD_CONFIG__: JSON.stringify({
+          brandSlug: process.env.BRAND_SLUG || 'nordel',
+          mode: process.env.DATA_MODE || 'demo',
+          dashboardApiUrl: process.env.PORTAL_API_URL || 'http://localhost:8080',
+          adminServersApiUrl: process.env.SERVERS_API_URL || 'http://localhost:8082',
+          serversCatalogUrl: process.env.SERVERS_CATALOG_URL || '/_api/servers'
+        })
+      }),
       new WatchPageSourcesPlugin(),
       ...createHtmlPlugins(),
       new MiniCssExtractPlugin({

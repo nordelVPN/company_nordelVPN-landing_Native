@@ -1,4 +1,4 @@
-/* global fetch */
+/* global __VPN_BUILD_CONFIG__ */
 'use strict';
 
 var DEFAULT_DEMO_SERVERS = [
@@ -49,6 +49,22 @@ var DEFAULT_DEMO_SERVERS = [
   }
 ];
 
+var GRID_A_PLANS = [
+  { plan_code: 'trial', name: 'Trial', duration_days: 5, price_minor: 50, currency: 'EUR', device_limit: 10, access_tier: 'trial', is_trial: true },
+  { plan_code: 'basic', name: 'Basic', duration_days: 30, price_minor: 700, currency: 'EUR', device_limit: 5, access_tier: 'standard', is_trial: false },
+  { plan_code: 'plus', name: 'Plus', duration_days: 180, price_minor: 2500, currency: 'EUR', device_limit: 5, access_tier: 'pro', is_trial: false },
+  { plan_code: 'complete', name: 'Complete', duration_days: 365, price_minor: 5500, currency: 'EUR', device_limit: 10, access_tier: 'vip', is_trial: false }
+];
+
+var GRID_B_PLANS = [
+  { plan_code: 'trial', name: 'Trial (1 month)', duration_days: 30, price_minor: 100, currency: 'EUR', device_limit: 5, access_tier: 'trial', is_trial: true },
+  { plan_code: 'monthly', name: '1 Month', duration_days: 30, price_minor: 700, currency: 'EUR', device_limit: 5, access_tier: 'standard', is_trial: false },
+  { plan_code: 'quarterly', name: '3 Months', duration_days: 90, price_minor: 1500, currency: 'EUR', device_limit: 5, access_tier: 'pro', is_trial: false },
+  { plan_code: 'yearly', name: '12 Months', duration_days: 365, price_minor: 5500, currency: 'EUR', device_limit: 5, access_tier: 'vip', is_trial: false }
+];
+
+var PROMO_RATES = { WELCOME10: 10, LAUNCH20: 20, NORDEL15: 15 };
+
 function createError(message, status, code, payload) {
   var err = new Error(message);
   err.status = status || 0;
@@ -57,23 +73,33 @@ function createError(message, status, code, payload) {
   return err;
 }
 
+function getBuildConfig() {
+  try {
+    return typeof __VPN_BUILD_CONFIG__ !== 'undefined' && __VPN_BUILD_CONFIG__ ? __VPN_BUILD_CONFIG__ : {};
+  } catch {
+    return {};
+  }
+}
+
 function createVpnPortalSdk(options) {
   var opts = options || {};
+  var buildCfg = getBuildConfig();
   var runtime = (typeof window !== 'undefined' && window.__VPN_PORTAL_CONFIG__) || {};
-  var brandSlug = String(opts.brandSlug || runtime.brandSlug || 'nordel').toLowerCase();
-  var mode = String(opts.mode || runtime.mode || 'demo').toLowerCase();
-  var dashboardApiUrl = String(opts.dashboardApiUrl || runtime.dashboardApiUrl || 'http://localhost:8081').replace(/\/+$/, '');
-  var adminServersApiUrl = String(opts.adminServersApiUrl || runtime.adminServersApiUrl || 'http://localhost:8082').replace(/\/+$/, '');
+  var brandSlug = String(runtime.brandSlug || opts.brandSlug || buildCfg.brandSlug || 'nordel').toLowerCase();
+  var mode = String(runtime.mode || opts.mode || buildCfg.mode || 'demo').toLowerCase();
+  var dashboardApiUrl = String(runtime.dashboardApiUrl || opts.dashboardApiUrl || buildCfg.dashboardApiUrl || 'http://localhost:8080').replace(/\/+$/, '');
+  var adminServersApiUrl = String(runtime.adminServersApiUrl || opts.adminServersApiUrl || buildCfg.adminServersApiUrl || 'http://localhost:8082').replace(/\/+$/, '');
+  var serversCatalogUrl = String(runtime.serversCatalogUrl || opts.serversCatalogUrl || buildCfg.serversCatalogUrl || '/_api/servers');
   var storagePrefix = opts.storagePrefix || (brandSlug + '-vpn-portal');
 
   function getStore(key) {
-    try { return localStorage.getItem(key); } catch { return null; }
+    try { return window.localStorage.getItem(key); } catch { return null; }
   }
 
   function setStore(key, val) {
     try {
-      if (val === null) localStorage.removeItem(key);
-      else localStorage.setItem(key, String(val));
+      if (val === null) window.localStorage.removeItem(key);
+      else window.localStorage.setItem(key, String(val));
     } catch { /* ignore */ }
   }
 
@@ -88,6 +114,7 @@ function createVpnPortalSdk(options) {
       try { return JSON.parse(raw); } catch { /* fallback */ }
     }
     var now = Date.now();
+    var isGridB = brandSlug === 'kuni' || brandSlug === 'n1x';
     var state = {
       client: {
         uuid: 'cli_demo_' + brandSlug,
@@ -98,11 +125,11 @@ function createVpnPortalSdk(options) {
         registered_at: new Date(now - 20 * 86400000).toISOString()
       },
       subscription: {
-        plan_code: 'plus',
-        plan_name: 'Plus',
+        plan_code: isGridB ? 'quarterly' : 'plus',
+        plan_name: isGridB ? '3 Months' : 'Plus',
         access_tier: 'pro',
         status: 'active',
-        price_minor: 2500,
+        price_minor: isGridB ? 1500 : 2500,
         currency: 'EUR',
         device_limit: 5,
         auto_renew: true,
@@ -116,7 +143,7 @@ function createVpnPortalSdk(options) {
         { device_uid: 'demo-macbook-pro', device_name: 'MacBook Pro M3', platform: 'macos', first_seen_at: new Date(now - 2 * 86400000).toISOString(), last_seen_at: new Date(now - 300000).toISOString() }
       ],
       payments: [
-        { uuid: 'pay_demo_01', plan_code: 'plus', final_amount_minor: 2500, currency: 'EUR', status: 'paid', payment_method: 'card', paid_at: new Date(now - 10 * 86400000).toISOString() }
+        { uuid: 'pay_demo_01', plan_code: isGridB ? 'quarterly' : 'plus', final_amount_minor: isGridB ? 1500 : 2500, currency: 'EUR', status: 'paid', payment_method: 'card', paid_at: new Date(now - 10 * 86400000).toISOString() }
       ]
     };
     setStore(storagePrefix + ':demo-state', JSON.stringify(state));
@@ -130,9 +157,12 @@ function createVpnPortalSdk(options) {
   function request(baseUrl, path, reqOpts) {
     var o = reqOpts || {};
     var headers = { Accept: 'application/json', 'X-Brand-Slug': brandSlug };
+    if (o.headers) {
+      Object.keys(o.headers).forEach(function (k) { headers[k] = o.headers[k]; });
+    }
     if (o.token) headers.Authorization = 'Bearer ' + o.token;
     if (o.body) headers['Content-Type'] = 'application/json';
-    return fetch(baseUrl + path, {
+    return window.fetch(baseUrl + path, {
       method: o.method || 'GET',
       headers: headers,
       body: o.body ? JSON.stringify(o.body) : undefined
@@ -154,8 +184,24 @@ function createVpnPortalSdk(options) {
   return {
     mode: mode,
     brandSlug: brandSlug,
+    dashboardApiUrl: dashboardApiUrl,
+    adminServersApiUrl: adminServersApiUrl,
+    serversCatalogUrl: serversCatalogUrl,
     isAuthenticated: isAuthenticated,
     clearSession: clearSession,
+    getPublicPlans: function () {
+      if (mode === 'live') {
+        return request(dashboardApiUrl, '/api/v1/public/' + encodeURIComponent(brandSlug) + '/plans');
+      }
+      var plans = (brandSlug === 'kuni' || brandSlug === 'n1x') ? GRID_B_PLANS : GRID_A_PLANS;
+      return Promise.resolve({ brand: brandSlug, currency: 'EUR', plans: plans });
+    },
+    getPublicServersCatalog: function () {
+      if (mode === 'live') {
+        return request('', serversCatalogUrl);
+      }
+      return Promise.resolve({ brand: brandSlug, servers: DEFAULT_DEMO_SERVERS });
+    },
     login: function (data) {
       if (mode === 'live') {
         return request(dashboardApiUrl, '/api/v1/portal/auth/login', { method: 'POST', body: data }).then(function (res) {
@@ -192,6 +238,12 @@ function createVpnPortalSdk(options) {
       }
       return Promise.resolve({ status: 'ok', message: 'If an account exists, reset instructions have been sent.' });
     },
+    resetPassword: function (data) {
+      if (mode === 'live') {
+        return request(dashboardApiUrl, '/api/v1/portal/auth/reset-password', { method: 'POST', body: data });
+      }
+      return Promise.resolve({ status: 'password_reset' });
+    },
     logout: function () {
       if (mode === 'live' && getToken()) {
         return request(dashboardApiUrl, '/api/v1/portal/auth/logout', { method: 'POST', token: getToken() }).finally(clearSession);
@@ -215,6 +267,62 @@ function createVpnPortalSdk(options) {
       if (mode === 'live') return request(dashboardApiUrl, '/api/v1/portal/subscription', { token: getToken() });
       var state = readDemoState();
       return Promise.resolve({ subscription: state.subscription });
+    },
+    checkout: function (data) {
+      if (mode === 'live') {
+        var hdrs = data && data.idempotencyKey ? { 'Idempotency-Key': data.idempotencyKey } : {};
+        return request(dashboardApiUrl, '/api/v1/portal/checkout', {
+          method: 'POST',
+          token: getToken(),
+          headers: hdrs,
+          body: {
+            plan_code: data.plan_code,
+            promo_code: data.promo_code || null,
+            payment_method: data.payment_method || 'card',
+            auto_renew: Boolean(data.auto_renew)
+          }
+        });
+      }
+      var plans = (brandSlug === 'kuni' || brandSlug === 'n1x') ? GRID_B_PLANS : GRID_A_PLANS;
+      var plan = plans.find(function (p) { return p.plan_code === String(data.plan_code || '').toLowerCase(); });
+      if (!plan) return Promise.reject(createError('Selected plan is not available.', 422, 'PLAN_NOT_FOUND'));
+      var promo = data.promo_code ? String(data.promo_code).trim().toUpperCase() : null;
+      var discount = 0;
+      if (promo) {
+        if (!PROMO_RATES[promo]) return Promise.reject(createError('Invalid promo code.', 422, 'PROMO_INVALID'));
+        discount = Math.round((plan.price_minor * PROMO_RATES[promo]) / 100);
+      }
+      var now = Date.now();
+      var state = readDemoState();
+      state.subscription = {
+        plan_code: plan.plan_code,
+        plan_name: plan.name,
+        access_tier: plan.access_tier,
+        status: plan.is_trial ? 'trial' : 'active',
+        price_minor: plan.price_minor,
+        currency: 'EUR',
+        device_limit: plan.device_limit,
+        auto_renew: Boolean(data.auto_renew),
+        starts_at: new Date(now).toISOString(),
+        expires_at: new Date(now + plan.duration_days * 86400000).toISOString(),
+        days_remaining: plan.duration_days,
+        access_key: 'vpn_demo_' + brandSlug + '_' + plan.plan_code + '_' + Date.now().toString(36)
+      };
+      var payment = {
+        uuid: 'pay_demo_' + now,
+        plan_code: plan.plan_code,
+        promo_code: promo,
+        amount_minor: plan.price_minor,
+        discount_minor: discount,
+        final_amount_minor: Math.max(0, plan.price_minor - discount),
+        currency: 'EUR',
+        status: 'paid',
+        payment_method: data.payment_method || 'card',
+        paid_at: new Date(now).toISOString()
+      };
+      state.payments.unshift(payment);
+      writeDemoState(state);
+      return Promise.resolve({ idempotent_replay: false, payment: payment, subscription: state.subscription });
     },
     getBillingHistory: function () {
       if (mode === 'live') return request(dashboardApiUrl, '/api/v1/portal/billing/history', { token: getToken() });

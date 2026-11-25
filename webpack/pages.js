@@ -2,7 +2,7 @@ module.exports = {
   index: {
     template: './pages/index.hbs',
     data: './src/data/index.js',
-    modules: ['i18n', 'theme-toggle', 'navigation', 'app-preview', 'wishlist'],
+    modules: ['i18n', 'theme-toggle', 'navigation', 'app-preview', 'wishlist', 'portal'],
     styles: ['base', 'pages/index']
   },
   about: {
