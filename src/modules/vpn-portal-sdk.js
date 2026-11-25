@@ -1,7 +1,8 @@
 /* eslint-disable */
 /**
  * VpnPortalSDK — Unified Portal & VPN Access Client for Nordel, LuniVPN, N1X, kuniVPN.
- * Supports DATA_MODE = 'demo' | 'live'.
+ * Supports DATA_MODE = 'live' | 'demo' (defaults to 'live').
+ * Config priority: window.__VPN_PORTAL_CONFIG__ -> options -> __VPN_BUILD_CONFIG__ -> production defaults.
  * Zero external dependencies, ES Module.
  */
 
@@ -119,14 +120,57 @@ function getDefaultStorage() {
   return createMemoryStorage();
 }
 
+function getBuildConfig() {
+  try {
+    if (typeof __VPN_BUILD_CONFIG__ !== 'undefined' && __VPN_BUILD_CONFIG__) {
+      return __VPN_BUILD_CONFIG__;
+    }
+  } catch {
+    // ignore
+  }
+  return {};
+}
+
+function generateIdempotencyKey() {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return `chk_${crypto.randomUUID()}`;
+    }
+  } catch {
+    // ignore
+  }
+  return `chk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
 class VpnPortalSDK {
   constructor(options = {}) {
     const runtimeConfig = (typeof window !== 'undefined' && window.__VPN_PORTAL_CONFIG__) || {};
-    this.brandSlug = String(options.brandSlug || runtimeConfig.brandSlug || 'nordel').toLowerCase();
-    this.mode = String(options.mode || runtimeConfig.mode || 'demo').toLowerCase();
-    this.dashboardApiUrl = String(options.dashboardApiUrl || runtimeConfig.dashboardApiUrl || 'http://localhost:8080').replace(/\/+$/, '');
-    this.adminServersApiUrl = String(options.adminServersApiUrl || runtimeConfig.adminServersApiUrl || 'http://localhost:8082').replace(/\/+$/, '');
-    this.serversCatalogUrl = String(options.serversCatalogUrl || runtimeConfig.serversCatalogUrl || '/_api/servers');
+    const buildConfig = getBuildConfig();
+
+    this.brandSlug = String(
+      runtimeConfig.brandSlug || options.brandSlug || buildConfig.brandSlug || 'nordel'
+    ).toLowerCase();
+    this.mode = String(
+      runtimeConfig.mode || options.mode || buildConfig.mode || 'live'
+    ).toLowerCase();
+    this.dashboardApiUrl = String(
+      runtimeConfig.dashboardApiUrl
+        || options.dashboardApiUrl
+        || buildConfig.dashboardApiUrl
+        || 'https://businessdashboard.cods.live'
+    ).replace(/\/+$/, '');
+    this.adminServersApiUrl = String(
+      runtimeConfig.adminServersApiUrl
+        || options.adminServersApiUrl
+        || buildConfig.adminServersApiUrl
+        || 'https://vpnservers.cods.live'
+    ).replace(/\/+$/, '');
+    this.serversCatalogUrl = String(
+      runtimeConfig.serversCatalogUrl
+        || options.serversCatalogUrl
+        || buildConfig.serversCatalogUrl
+        || '/_api/servers'
+    );
     this.storagePrefix = options.storagePrefix || `${this.brandSlug}-vpn-portal`;
     this.storage = options.storage || getDefaultStorage();
     this.fetchImpl = options.fetch || (typeof fetch === 'function' ? fetch.bind(globalThis) : null);
@@ -495,7 +539,7 @@ class VpnPortalSDK {
     idempotencyKey = null,
   }) {
     if (this.mode === 'live') {
-      const headers = idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {};
+      const headers = { 'Idempotency-Key': idempotencyKey || generateIdempotencyKey() };
       const body = { plan_code, promo_code, payment_method, auto_renew };
       if (provider) body.provider = provider;
       if (return_url) body.return_url = return_url;
@@ -569,7 +613,7 @@ class VpnPortalSDK {
 
     const checkoutUrl = return_url
       ? `${return_url}${return_url.includes('?') ? '&' : '?'}payment_uuid=${encodeURIComponent(payment.uuid)}&status=success`
-      : `./account.html`;
+      : './account.html';
 
     return {
       idempotent_replay: false,
@@ -824,6 +868,55 @@ function formatPaymentStatus(status) {
   return map[key] || (status ? String(status) : 'Pending');
 }
 
+function formatServerLocation(srv) {
+  const country = srv.country_name || srv.country_code || '';
+  const city = srv.city || '';
+  const place = country && city ? `${country} (${city})` : (srv.name || country || city || 'Server');
+  const host = srv.public_host ? ` · ${srv.public_host}` : '';
+  const rec = srv.is_recommended ? ' ★ Recommended' : '';
+  return `${place}${host}${rec}`;
+}
+
+function formatServerStatusAndLoad(srv) {
+  const st = srv.status || 'online';
+  const load = typeof srv.load_percent === 'number' ? ` · ${srv.load_percent}%` : '';
+  return `${st}${load}`;
+}
+
+function formatServerProtocolsAndTags(srv) {
+  const protos = (srv.protocols || []).map((p) => (typeof p === 'string' ? p : p.type)).filter(Boolean);
+  const tags = Array.isArray(srv.tags) ? srv.tags.filter(Boolean) : [];
+  if (protos.length && tags.length) return `${protos.join(', ')} [${tags.join(', ')}]`;
+  return protos.join(', ') || tags.join(', ') || '—';
+}
+
+function renderLiveServersStrip(container, servers) {
+  if (typeof document === 'undefined' || !container || !Array.isArray(servers) || !servers.length) return;
+  let strip = container.querySelector('[data-live-servers-strip]');
+  if (!strip) {
+    strip = document.createElement('div');
+    strip.setAttribute('data-live-servers-strip', '');
+    strip.className = 'live-servers-strip';
+    strip.style.cssText = 'margin-top:16px;padding:12px 16px;border-radius:12px;border:1px solid rgba(128,128,128,0.28);display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:0.875rem;';
+    container.appendChild(strip);
+  }
+  strip.innerHTML = '';
+
+  const title = document.createElement('strong');
+  title.textContent = `Live servers (${servers.length}):`;
+  strip.appendChild(title);
+
+  servers.slice(0, 8).forEach((srv) => {
+    const chip = document.createElement('span');
+    chip.className = 'live-server-chip';
+    chip.style.cssText = 'display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid rgba(128,128,128,0.3);';
+    const dot = srv.status === 'online' ? '●' : '◐';
+    const label = srv.city ? `${srv.country_name || srv.country_code || ''} — ${srv.city}` : (srv.name || srv.country_name || srv.country_code || 'Node');
+    chip.textContent = `${dot} ${label}`;
+    strip.appendChild(chip);
+  });
+}
+
 async function mountPaymentProviderSelector(sdk, container) {
   if (!container) return null;
   let data;
@@ -875,6 +968,92 @@ async function mountPaymentProviderSelector(sdk, container) {
   };
 }
 
+function handleCheckoutResponse(sdk, res, options = {}) {
+  const mode = res?.checkout?.mode;
+  const targetUrl = res?.checkout?.checkout_url;
+  const paymentUuid = res?.payment?.uuid;
+  const accountReturnUrl = options.accountReturnUrl
+    || (paymentUuid
+      ? `./account.html?payment_uuid=${encodeURIComponent(paymentUuid)}&status=success`
+      : './account.html');
+
+  if (mode === 'mock' && paymentUuid && typeof document !== 'undefined') {
+    const existing = document.getElementById('vpn-mock-checkout-panel');
+    if (existing) existing.remove();
+
+    const panel = document.createElement('div');
+    panel.id = 'vpn-mock-checkout-panel';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    panel.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.65);display:flex;align-items:center;justify-content:center;padding:16px;';
+
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#111827;color:#f9fafb;border:1px solid rgba(255,255,255,0.2);border-radius:14px;max-width:440px;width:100%;padding:24px;box-shadow:0 20px 50px rgba(0,0,0,0.45);font-family:system-ui,sans-serif;';
+
+    const heading = document.createElement('h3');
+    heading.style.cssText = 'margin:0 0 8px;font-size:1.125rem;';
+    heading.textContent = options.mockTitle || 'Confirm test payment (Mock)';
+
+    const amountMinor = res?.payment?.final_amount_minor ?? res?.payment?.amount_minor;
+    const amountText = typeof amountMinor === 'number' ? `€${(amountMinor / 100).toFixed(2)}` : '';
+    const desc = document.createElement('p');
+    desc.style.cssText = 'margin:0 0 16px;font-size:0.9rem;opacity:0.85;line-height:1.45;';
+    desc.textContent = `Plan: ${res?.payment?.plan_code || 'subscription'} ${amountText ? `(${amountText})` : ''}. Click below to complete the test payment and activate your VPN key.`;
+
+    const statusLine = document.createElement('p');
+    statusLine.style.cssText = 'margin:0 0 12px;font-size:0.85rem;min-height:1.2em;';
+
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;';
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.type = 'button';
+    confirmBtn.setAttribute('data-mock-confirm-payment', paymentUuid);
+    confirmBtn.style.cssText = 'padding:10px 16px;border-radius:8px;border:0;background:#10b981;color:#052e16;font-weight:600;cursor:pointer;';
+    confirmBtn.textContent = options.mockConfirmLabel || 'Confirm test payment';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.style.cssText = 'padding:10px 16px;border-radius:8px;border:1px solid rgba(255,255,255,0.3);background:transparent;color:#f9fafb;cursor:pointer;';
+    cancelBtn.textContent = options.mockCancelLabel || 'Cancel';
+
+    confirmBtn.addEventListener('click', async () => {
+      confirmBtn.disabled = true;
+      statusLine.textContent = 'Completing test payment...';
+      try {
+        await sdk.mockCompletePayment(paymentUuid, 'paid');
+        statusLine.textContent = 'Payment confirmed! Opening your account...';
+        window.location.href = accountReturnUrl;
+      } catch (err) {
+        confirmBtn.disabled = false;
+        statusLine.textContent = err?.message || 'Could not complete test payment.';
+      }
+    });
+
+    cancelBtn.addEventListener('click', () => {
+      panel.remove();
+    });
+
+    actions.appendChild(confirmBtn);
+    actions.appendChild(cancelBtn);
+    card.appendChild(heading);
+    card.appendChild(desc);
+    card.appendChild(statusLine);
+    card.appendChild(actions);
+    panel.appendChild(card);
+    document.body.appendChild(panel);
+    return 'mock';
+  }
+
+  if (targetUrl) {
+    window.location.href = targetUrl;
+    return 'redirect';
+  }
+
+  window.location.href = accountReturnUrl;
+  return 'fallback';
+}
+
 function initCheckoutReturnPolling(sdk, options = {}) {
   if (typeof window === 'undefined' || typeof document === 'undefined') return false;
   const params = new URLSearchParams(window.location.search);
@@ -904,8 +1083,20 @@ function initCheckoutReturnPolling(sdk, options = {}) {
     banner.textContent = text;
   };
 
+  const clearQueryParams = () => {
+    try {
+      if (window.history && typeof window.history.replaceState === 'function') {
+        const cleanUrl = window.location.pathname + window.location.hash;
+        window.history.replaceState({}, document.title, cleanUrl);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
   if (status === 'cancelled') {
     showBanner(options.cancelledText || 'Payment was cancelled. You can try again or choose another payment method.');
+    clearQueryParams();
     return true;
   }
 
@@ -914,16 +1105,19 @@ function initCheckoutReturnPolling(sdk, options = {}) {
     const startedAt = Date.now();
     const maxMs = options.timeoutMs || 30000;
     const intervalMs = options.intervalMs || 1500;
+    let mockTriggered = false;
 
     const poll = async () => {
       try {
-        if (isMock && sdk.mode === 'live') {
+        if (isMock && !mockTriggered && sdk.mode === 'live') {
+          mockTriggered = true;
           await sdk.mockCompletePayment(paymentUuid, 'paid');
         }
         const res = await sdk.getPaymentStatus(paymentUuid);
         const st = res?.payment?.status;
         if (st === 'paid') {
-          showBanner(options.paidText || 'Payment confirmed! Redirecting to your account...');
+          showBanner(options.paidText || 'Payment confirmed! Updating your VPN access...');
+          clearQueryParams();
           if (typeof options.onPaid === 'function') {
             options.onPaid(res);
           } else {
@@ -933,6 +1127,7 @@ function initCheckoutReturnPolling(sdk, options = {}) {
         }
         if (st === 'failed' || st === 'expired') {
           showBanner(options.failedText || 'Payment failed or expired. Please try again.', true);
+          clearQueryParams();
           return;
         }
       } catch {
@@ -953,4 +1148,17 @@ function initCheckoutReturnPolling(sdk, options = {}) {
   return false;
 }
 
-module.exports = { VpnPortalSDK, PortalApiError, createVpnPortalSdk, formatPaymentProvider, formatPaymentStatus, mountPaymentProviderSelector, initCheckoutReturnPolling };
+module.exports = {
+  VpnPortalSDK,
+  PortalApiError,
+  createVpnPortalSdk,
+  formatPaymentProvider,
+  formatPaymentStatus,
+  formatServerLocation,
+  formatServerStatusAndLoad,
+  formatServerProtocolsAndTags,
+  renderLiveServersStrip,
+  mountPaymentProviderSelector,
+  handleCheckoutResponse,
+  initCheckoutReturnPolling,
+};

@@ -9,7 +9,8 @@
     "build:prod": "webpack --config webpack/webpack.prod.js",
     "build": "npm run build:prod",
     "lint": "eslint src webpack",
-    "start:live": "node -e \"const {spawnSync}=require('child_process');process.exit(spawnSync('npm',['start'],{stdio:'inherit',shell:true,env:{...process.env,DATA_MODE:'live',BRAND_SLUG:'nordel',PORT:'3001',SITE_PORT:'3001',PORTAL_API_URL:process.env.PORTAL_API_URL||'http://localhost:8080',SERVERS_API_URL:process.env.SERVERS_API_URL||'http://localhost:8082'}}).status||0)\""
+    "start:live": "node -e \"const {spawnSync}=require('child_process');process.exit(spawnSync('npm',['start'],{stdio:'inherit',shell:true,env:{...process.env,DATA_MODE:'live',BRAND_SLUG:'nordel',PORT:process.env.PORT||'3001',SITE_PORT:process.env.SITE_PORT||'3001',PORTAL_API_URL:process.env.PORTAL_API_URL||'http://localhost:8081',SERVERS_API_URL:process.env.SERVERS_API_URL||'http://localhost:8082',SERVERS_CATALOG_URL:process.env.SERVERS_CATALOG_URL||'/_api/servers'}}).status||0)\"",
+    "start:demo": "node -e \"const {spawnSync}=require('child_process');process.exit(spawnSync('npm',['start'],{stdio:'inherit',shell:true,env:{...process.env,DATA_MODE:'demo',BRAND_SLUG:'nordel',PORT:process.env.PORT||'3001',SITE_PORT:process.env.SITE_PORT||'3001'}}).status||0)\""
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",

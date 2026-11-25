@@ -1,0 +1,17 @@
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location = /_api/servers {
+        proxy_pass https://vpnservers.cods.live/api/v1/sites/nordel/servers;
+        proxy_set_header Authorization "Bearer ${BRAND_API_TOKEN}";
+        proxy_set_header Host vpnservers.cods.live;
+        proxy_ssl_server_name on;
+    }
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}

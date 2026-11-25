@@ -62,6 +62,8 @@ class WatchPageSourcesPlugin {
 
 module.exports = (env, argv) => {
   const isProduction = argv.mode === 'production';
+  const defaultPortalUrl = isProduction ? 'https://businessdashboard.cods.live' : 'http://localhost:8081';
+  const defaultServersUrl = isProduction ? 'https://vpnservers.cods.live' : 'http://localhost:8082';
 
   return {
     context: rootDir,
@@ -105,9 +107,9 @@ module.exports = (env, argv) => {
       new webpack.DefinePlugin({
         __VPN_BUILD_CONFIG__: JSON.stringify({
           brandSlug: process.env.BRAND_SLUG || 'nordel',
-          mode: process.env.DATA_MODE || 'demo',
-          dashboardApiUrl: process.env.PORTAL_API_URL || 'http://localhost:8080',
-          adminServersApiUrl: process.env.SERVERS_API_URL || 'http://localhost:8082',
+          mode: process.env.DATA_MODE || 'live',
+          dashboardApiUrl: process.env.PORTAL_API_URL || defaultPortalUrl,
+          adminServersApiUrl: process.env.SERVERS_API_URL || defaultServersUrl,
           serversCatalogUrl: process.env.SERVERS_CATALOG_URL || '/_api/servers'
         })
       }),

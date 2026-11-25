@@ -1,4 +1,4 @@
-/* global navigator, URLSearchParams */
+/* global navigator, URLSearchParams, URL */
 'use strict';
 
 var sdkFactory = require('./vpn-portal-sdk');
@@ -43,6 +43,7 @@ function initLandingLiveFeed() {
     var servers = (res && (res.servers || res.locations || res.data)) || [];
     if (!servers.length) return;
     pricing.setAttribute('data-live-servers-count', String(servers.length));
+    sdkFactory.renderLiveServersStrip(pricing.querySelector('.container') || pricing, servers);
   }).catch(function () { /* optional */ });
 }
 
@@ -142,7 +143,10 @@ function initForgotAndResetForms() {
 }
 
 function initCheckoutAction() {
-  sdkFactory.initCheckoutReturnPolling(sdk);
+  var isAccountPage = Boolean(document.querySelector('[data-portal-account]'));
+  if (!isAccountPage) {
+    sdkFactory.initCheckoutReturnPolling(sdk);
+  }
 
   var getProvider = function () { return null; };
   var pricingSection = document.querySelector('#pricing .container, #pricing');
@@ -169,17 +173,22 @@ function initCheckoutAction() {
     }
     e.preventDefault();
     var planCode = btn.getAttribute('data-checkout-plan');
-    var baseUrl = window.location.origin + window.location.pathname;
+    var returnUrl = new URL('./account.html', window.location.href).href;
+    var cancelUrl = new URL('./index.html?status=cancelled', window.location.href).href;
     sdk.checkout({
       plan_code: planCode,
       provider: getProvider(),
-      return_url: baseUrl,
-      cancel_url: baseUrl + '?status=cancelled'
+      return_url: returnUrl,
+      cancel_url: cancelUrl
     }).then(function (res) {
-      var target = res && res.checkout && res.checkout.checkout_url;
-      window.location.href = target || './account.html';
-    }).catch(function () {
-      window.location.href = './account.html';
+      sdkFactory.handleCheckoutResponse(sdk, res);
+    }).catch(function (err) {
+      var banner = document.querySelector('[data-portal-status]');
+      if (banner) {
+        setStatus(banner, (err && err.message) || 'Checkout failed.', true);
+      } else {
+        window.location.href = './account.html';
+      }
     });
   });
 }
@@ -239,10 +248,10 @@ function initAccountPage() {
     servers.forEach(function (srv) {
       var tr = document.createElement('tr');
       tr.innerHTML = '<td></td><td></td><td></td><td></td>';
-      tr.children[0].textContent = (srv.country_code || '') + ' — ' + srv.name + (srv.is_recommended ? ' ★' : '');
-      tr.children[1].textContent = srv.status || 'online';
+      tr.children[0].textContent = sdkFactory.formatServerLocation(srv);
+      tr.children[1].textContent = sdkFactory.formatServerStatusAndLoad(srv);
       tr.children[2].textContent = srv.ping_ms ? srv.ping_ms + ' ms' : '—';
-      tr.children[3].textContent = (srv.protocols || []).map(function (p) { return p.type; }).join(', ');
+      tr.children[3].textContent = sdkFactory.formatServerProtocolsAndTags(srv);
       listEl.appendChild(tr);
     });
   }
@@ -266,46 +275,70 @@ function initAccountPage() {
     });
   }
 
-  Promise.all([sdk.getMe(), sdk.getSubscription(), sdk.getBillingHistory()]).then(function (results) {
-    var me = results[0];
-    var subRes = results[1];
-    var billRes = results[2];
-    var client = me && me.client;
-    var sub = subRes && subRes.subscription;
+  function loadAccountData() {
+    return Promise.all([sdk.getMe(), sdk.getSubscription(), sdk.getBillingHistory()]).then(function (results) {
+      var me = results[0];
+      var subRes = results[1];
+      var billRes = results[2];
+      var client = me && me.client;
+      var sub = subRes && subRes.subscription;
 
-    if (client) {
-      var nameInput = root.querySelector('[name="display_name"]');
-      var emailEl = root.querySelector('[data-profile-email]');
-      if (nameInput) nameInput.value = client.display_name || '';
-      if (emailEl) emailEl.textContent = client.email;
-    }
+      if (client) {
+        var nameInput = root.querySelector('[name="display_name"]');
+        var emailEl = root.querySelector('[data-profile-email]');
+        if (nameInput) nameInput.value = client.display_name || '';
+        if (emailEl) emailEl.textContent = client.email;
+      }
 
-    if (sub) {
-      var planEl = root.querySelector('[data-sub-plan]');
-      var statusBadge = root.querySelector('[data-sub-status]');
-      var expEl = root.querySelector('[data-sub-expires]');
-      if (planEl) planEl.textContent = sub.plan_name + ' (' + sub.access_tier + ')';
-      if (statusBadge) statusBadge.textContent = sub.status;
-      if (expEl) expEl.textContent = sub.expires_at ? new Date(sub.expires_at).toLocaleDateString() : '—';
+      if (sub) {
+        var planEl = root.querySelector('[data-sub-plan]');
+        var statusBadge = root.querySelector('[data-sub-status]');
+        var expEl = root.querySelector('[data-sub-expires]');
+        if (planEl) planEl.textContent = sub.plan_name + ' (' + sub.access_tier + ')';
+        if (statusBadge) statusBadge.textContent = sub.status;
+        if (expEl) expEl.textContent = sub.expires_at ? new Date(sub.expires_at).toLocaleDateString() : '—';
 
-      state.accessKey = sub.access_key || '';
-      var keyEl = root.querySelector('[data-vpn-key]');
-      if (keyEl) keyEl.textContent = maskKey(state.accessKey);
+        state.accessKey = sub.access_key || '';
+        var keyEl = root.querySelector('[data-vpn-key]');
+        if (keyEl) keyEl.textContent = state.revealed ? state.accessKey : maskKey(state.accessKey);
 
-      sdk.getBootstrap(state.accessKey).then(function (boot) {
-        renderServers(boot.servers || []);
-      }).catch(function (err) {
-        if (err.code === 'KEY_EXPIRED') {
-          setStatus(statusEl, 'Your VPN subscription has expired. Please renew your plan.', true);
+        if (state.accessKey) {
+          sdk.getBootstrap(state.accessKey).then(function (boot) {
+            renderServers(boot.servers || []);
+          }).catch(function (err) {
+            if (err.code === 'KEY_EXPIRED') {
+              setStatus(statusEl, 'Your VPN subscription has expired. Please renew your plan.', true);
+            } else if (err.code === 'KEY_REVOKED') {
+              setStatus(statusEl, 'Your VPN key has been revoked. Please contact support.', true);
+            } else if (err.code === 'DEVICE_LIMIT_REACHED' || err.status === 409) {
+              setStatus(statusEl, 'Device limit reached (5/5). Please revoke one of your connected devices below.', true);
+              var errDevices = err.payload && err.payload.error && err.payload.error.devices;
+              if (Array.isArray(errDevices)) renderDevices({ limit: 5, devices: errDevices });
+            }
+          });
+
+          sdk.getDevices(state.accessKey).then(renderDevices).catch(function () { /* ignore */ });
+        } else {
+          renderServers([]);
+          renderDevices({ limit: 5, devices: [] });
         }
-      });
+      } else {
+        renderServers([]);
+        renderDevices({ limit: 5, devices: [] });
+      }
 
-      sdk.getDevices(state.accessKey).then(renderDevices).catch(function () { /* ignore */ });
+      renderBilling(billRes && billRes.payments);
+    }).catch(function (err) {
+      setStatus(statusEl, err.message || 'Could not load account data.', true);
+    });
+  }
+
+  loadAccountData();
+  sdkFactory.initCheckoutReturnPolling(sdk, {
+    statusEl: statusEl,
+    onPaid: function () {
+      loadAccountData();
     }
-
-    renderBilling(billRes && billRes.payments);
-  }).catch(function (err) {
-    setStatus(statusEl, err.message || 'Could not load account data.', true);
   });
 
   var revealBtn = root.querySelector('[data-key-reveal]');
