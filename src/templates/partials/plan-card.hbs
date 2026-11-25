@@ -1,7 +1,7 @@
 <article class="plan{{#if popular}} plan--popular{{/if}}">
   {{#if popular}}<span class="plan-badge" data-i18n="pricing.badge">{{@root.pricing.badge}}</span>{{/if}}
   <h3 data-i18n="pricing.plans.{{@index}}.name">{{name}}</h3><p class="plan-description" data-i18n="pricing.plans.{{@index}}.description">{{description}}</p>
-  <p class="plan-price"><strong>{{price}}&nbsp;€</strong> <span data-i18n="pricing.plans.{{@index}}.period">{{period}}</span></p>
+  <p class="plan-price"><strong>€{{price}}</strong> <span data-i18n="pricing.plans.{{@index}}.period">{{period}}</span></p>
   <button class="button{{#unless popular}} button--secondary{{/unless}}" type="button" data-wishlist-open data-i18n-aria-label="pricing.plans.{{@index}}.label" aria-label="{{@root.pricing.button}}: {{name}}"><span data-i18n="pricing.button">{{@root.pricing.button}}</span> ↗</button>
   <ul>{{#each features}}<li data-i18n="pricing.plans.{{@../index}}.features.{{@index}}">{{this}}</li>{{/each}}</ul>
 </article>

@@ -14,58 +14,45 @@ module.exports = {
     status: 'Not connected', connectedStatus: 'Connected (preview)', heading: 'Ready when you are', connectedHeading: 'You’re connected', note: 'Your connection is currently off.', connectedNote: 'Demo only — your network connection has not changed.', connect: 'Connect', disconnect: 'Disconnect', locationLabel: 'Selected location', location: 'Fastest location',
     tabs: ['Home', 'Locations', 'Account'], demoNotice: 'This is a concept preview. Locations and accounts are not available yet.' },
   pricing: {
-  "eyebrow": "Your freedom starts here",
-  "title": "Find the plan that fits.",
-  "description": "Choose how you want to connect with Nordel.",
-  "button": "Choose plan",
-  "note": "Currency and billing terms will be confirmed. Plan selection opens the wishlist; payment is not available.",
-  "plans": [
-    {
-      "name": "Trial",
-      "description": "Try all features.",
-      "price": "0.50",
-      "period": "/ 5 days",
-      "features": [
-        "10 devices",
-        "All features"
-      ]
-    },
-    {
-      "name": "Basic",
-      "description": "For a monthly connection.",
-      "price": "7",
-      "period": "/ 1 month",
-      "features": [
-        "5 devices",
-        "3 servers"
-      ]
-    },
-    {
-      "name": "Plus",
-      "description": "Connect for six months.",
-      "price": "25",
-      "period": "/ 6 months",
-      "features": [
-        "5 devices",
-        "All servers",
-        "Browser extension"
-      ]
-    },
-    {
-      "name": "Complete",
-      "description": "A full year of Nordel.",
-      "price": "55",
-      "period": "/ 12 months",
-      "features": [
-        "10 devices",
-        "All servers",
-        "Advanced features",
-        "Ad blocker",
-        "Password manager",
-        "Data cloud"
-      ]
-    }
-  ]
-},
+    eyebrow: 'Your freedom starts here',
+    title: 'Find the plan that fits.',
+    description: 'Choose how you want to connect with Nordel.',
+    button: 'Choose plan',
+    note: 'All prices are shown in EUR (€) for the full plan period. Plan selection opens the wishlist or checkout.',
+    plans: [
+      {
+        planId: 'trial',
+        name: 'Trial',
+        description: 'Try all features.',
+        price: '0.50',
+        period: '/ 5 days',
+        features: ['10 devices', 'All features']
+      },
+      {
+        planId: 'basic',
+        name: 'Basic',
+        description: 'For a monthly connection.',
+        price: '7',
+        period: '/ 1 month',
+        features: ['5 devices', '3 servers']
+      },
+      {
+        planId: 'plus',
+        name: 'Plus',
+        description: 'Connect for six months.',
+        price: '25',
+        period: '/ 6 months',
+        features: ['5 devices', 'All servers', 'Browser extension']
+      },
+      {
+        planId: 'complete',
+        name: 'Complete',
+        description: 'A full year of Nordel.',
+        price: '55',
+        period: '/ 12 months',
+        features: ['10 devices', 'All servers', 'Advanced features', 'Ad blocker', 'Password manager', 'Data cloud']
+      }
+    ]
+  },
   wishlist: { title: 'Nordel wishlist', description: 'Our Telegram wishlist is not available yet. Please check back soon.', telegramUrl: '', buttonText: 'Open Telegram', close: 'Close' }
 };
