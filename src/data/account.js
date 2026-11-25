@@ -1,0 +1,1 @@
+module.exports = { lang: 'en', title: 'Account — Nordel', description: 'Manage your Nordel VPN subscription, servers, and devices.', canonical: '', wishlist: require('./index').wishlist };

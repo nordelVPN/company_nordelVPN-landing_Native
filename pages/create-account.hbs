@@ -1,0 +1,36 @@
+<section class="portal-section">
+  <div class="container">
+    <div class="portal-card">
+      <p class="eyebrow">Nordel Account</p>
+      <h1>Create Account</h1>
+      <p class="lead">Start your private connection in seconds.</p>
+      <form class="portal-form" data-portal-register>
+        <div class="portal-status" data-portal-status hidden role="status"></div>
+        <label class="portal-field">
+          <span>Display Name</span>
+          <input type="text" name="display_name" autocomplete="name" placeholder="Alex">
+        </label>
+        <label class="portal-field">
+          <span>Email</span>
+          <input type="email" name="email" required autocomplete="email" placeholder="you@example.com">
+        </label>
+        <label class="portal-field">
+          <span>Password (min 8 characters)</span>
+          <input type="password" name="password" required minlength="8" autocomplete="new-password">
+        </label>
+        <label class="portal-field">
+          <span>Confirm Password</span>
+          <input type="password" name="password_confirmation" required minlength="8" autocomplete="new-password">
+        </label>
+        <label>
+          <input type="checkbox" name="accept_terms" required>
+          I agree to the <a href="./terms.html">Terms of Use</a> and <a href="./privacy.html">Privacy Policy</a>.
+        </label>
+        <button class="button" type="submit">Create Account ↗</button>
+      </form>
+      <div class="portal-links">
+        <a href="./login.html">Already have an account? Sign In</a>
+      </div>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,81 @@
+<section class="portal-section" data-portal-account>
+  <div class="container">
+    <div class="portal-card portal-card--wide">
+      <div class="account-block__head">
+        <div>
+          <p class="eyebrow">Nordel Personal Account</p>
+          <h1>Account Dashboard</h1>
+        </div>
+        <button class="button button--secondary" type="button" data-logout>Sign Out</button>
+      </div>
+      <div class="portal-status" data-portal-status hidden role="status"></div>
+
+      <div class="account-grid">
+        <article class="account-block" id="profile">
+          <div class="account-block__head"><h2>1. Overview &amp; Profile</h2><span data-profile-email>—</span></div>
+          <form class="portal-form" data-profile-form>
+            <label class="portal-field"><span>Display Name</span><input type="text" name="display_name" required></label>
+            <button class="button button--secondary" type="submit">Save Profile</button>
+          </form>
+        </article>
+
+        <article class="account-block" id="subscription">
+          <div class="account-block__head"><h2>2. Subscription &amp; Plan</h2><strong data-sub-status>—</strong></div>
+          <p>Current plan: <strong data-sub-plan>—</strong> · Expires: <strong data-sub-expires>—</strong></p>
+          <p><a class="button" href="./index.html#pricing">Renew / Change Plan ↗</a></p>
+        </article>
+
+        <article class="account-block" id="vpn-access">
+          <div class="account-block__head"><h2>3. VPN Key &amp; Available Servers</h2></div>
+          <div class="account-key-box">
+            <code data-vpn-key>••••••••••••</code>
+            <button class="button button--secondary" type="button" data-key-reveal>Show</button>
+            <button class="button button--secondary" type="button" data-key-copy>Copy</button>
+          </div>
+          <div class="account-table-wrap">
+            <table class="account-table">
+              <thead><tr><th>Location</th><th>Status</th><th>Ping</th><th>Protocols</th></tr></thead>
+              <tbody data-servers-list><tr><td colspan="4">Loading servers...</td></tr></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="account-block" id="devices">
+          <div class="account-block__head"><h2>4. Connected Devices</h2><strong data-devices-count>0 / 5</strong></div>
+          <div class="account-progress"><div class="account-progress__bar" data-devices-bar style="width:0%"></div></div>
+          <div class="account-table-wrap">
+            <table class="account-table">
+              <thead><tr><th>Device</th><th>Platform</th><th>Last Active</th><th>Action</th></tr></thead>
+              <tbody data-devices-list><tr><td colspan="4">Loading devices...</td></tr></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="account-block" id="billing">
+          <div class="account-block__head"><h2>5. Billing History</h2></div>
+          <div class="account-table-wrap">
+            <table class="account-table">
+              <thead><tr><th>Date</th><th>Plan</th><th>Amount</th><th>Status</th></tr></thead>
+              <tbody data-billing-list><tr><td colspan="4">Loading payments...</td></tr></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="account-block" id="security">
+          <div class="account-block__head"><h2>6. Security &amp; Support</h2><button class="button button--secondary" type="button" data-logout-all>Revoke All Sessions</button></div>
+          <form class="portal-form" data-password-form>
+            <label class="portal-field"><span>Current Password</span><input type="password" name="current_password" required></label>
+            <label class="portal-field"><span>New Password</span><input type="password" name="password" required minlength="8"></label>
+            <label class="portal-field"><span>Confirm New Password</span><input type="password" name="password_confirmation" required minlength="8"></label>
+            <button class="button button--secondary" type="submit">Update Password</button>
+          </form>
+          <form class="portal-form" data-support-form>
+            <label class="portal-field"><span>Support Subject</span><input type="text" name="subject" required minlength="3"></label>
+            <label class="portal-field"><span>Message</span><textarea name="message" rows="3" required minlength="5"></textarea></label>
+            <button class="button" type="submit">Send Support Request</button>
+          </form>
+        </article>
+      </div>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,146 @@
+.portal-section {
+  padding: clamp(3rem, 6vw, 5rem) 0;
+  min-height: 70vh;
+}
+
+.portal-card {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 2rem;
+  border-radius: 1.25rem;
+  border: 1px solid var(--border, rgba(148, 163, 184, 0.25));
+  background: var(--surface, var(--bg-soft, #ffffff));
+}
+
+.portal-card--wide {
+  max-width: 1080px;
+}
+
+.portal-form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.portal-field {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.portal-field input,
+.portal-field textarea,
+.portal-field select {
+  width: 100%;
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.65rem;
+  border: 1px solid var(--border, rgba(148, 163, 184, 0.35));
+  background: var(--bg, transparent);
+  color: inherit;
+  font: inherit;
+}
+
+.portal-status {
+  padding: 0.75rem 1rem;
+  border-radius: 0.65rem;
+  font-size: 0.92rem;
+  border: 1px solid transparent;
+}
+
+.portal-status[hidden] {
+  display: none;
+}
+
+.portal-status--error {
+  border-color: rgba(239, 68, 68, 0.45);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.portal-status--success {
+  border-color: rgba(34, 197, 94, 0.45);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.portal-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  font-size: 0.92rem;
+}
+
+.account-grid {
+  display: grid;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.account-block {
+  padding: 1.5rem;
+  border-radius: 1rem;
+  border: 1px solid var(--border, rgba(148, 163, 184, 0.25));
+  background: var(--surface, var(--bg-soft, transparent));
+}
+
+.account-block__head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.account-key-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 0.65rem;
+  border: 1px dashed var(--border, rgba(148, 163, 184, 0.4));
+  margin-bottom: 1rem;
+  word-break: break-all;
+}
+
+.account-table-wrap {
+  overflow-x: auto;
+}
+
+.account-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.account-table th,
+.account-table td {
+  text-align: left;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--border, rgba(148, 163, 184, 0.2));
+}
+
+.account-progress {
+  width: 100%;
+  height: 0.6rem;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.2);
+  overflow: hidden;
+  margin: 0.5rem 0 1rem;
+}
+
+.account-progress__bar {
+  height: 100%;
+  background: currentColor;
+  transition: width 0.2s ease;
+}
+
+.legal-content {
+  max-width: 780px;
+  display: grid;
+  gap: 1rem;
+}
+
+.legal-content h1 {
+  overflow-wrap: break-word;
+}

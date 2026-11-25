@@ -1,0 +1,293 @@
+/* global navigator */
+'use strict';
+
+var sdkFactory = require('./vpn-portal-sdk');
+var sdk = sdkFactory.createVpnPortalSdk({ brandSlug: 'nordel' });
+
+function setStatus(el, msg, isError) {
+  if (!el) return;
+  el.hidden = false;
+  el.textContent = msg;
+  el.className = 'portal-status ' + (isError ? 'portal-status--error' : 'portal-status--success');
+}
+
+function maskKey(key) {
+  if (!key || key.length < 12) return '••••••••';
+  return key.slice(0, 10) + '••••••••••••' + key.slice(-4);
+}
+
+function initLoginForm() {
+  var form = document.querySelector('[data-portal-login]');
+  if (!form) return;
+  var statusEl = form.querySelector('[data-portal-status]');
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var email = form.email.value.trim();
+    var password = form.password.value;
+    if (!email || !password) {
+      setStatus(statusEl, 'Please enter your email and password.', true);
+      return;
+    }
+    sdk.login({ email: email, password: password }).then(function () {
+      setStatus(statusEl, 'Signed in. Redirecting to your account...', false);
+      window.location.href = './account.html';
+    }).catch(function (err) {
+      setStatus(statusEl, err.message || 'Sign in failed.', true);
+    });
+  });
+}
+
+function initRegisterForm() {
+  var form = document.querySelector('[data-portal-register]');
+  if (!form) return;
+  var statusEl = form.querySelector('[data-portal-status]');
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var email = form.email.value.trim();
+    var password = form.password.value;
+    var confirm = form.password_confirmation.value;
+    if (password.length < 8) {
+      setStatus(statusEl, 'Password must be at least 8 characters.', true);
+      return;
+    }
+    if (password !== confirm) {
+      setStatus(statusEl, 'Passwords do not match.', true);
+      return;
+    }
+    sdk.register({
+      email: email,
+      password: password,
+      password_confirmation: confirm,
+      display_name: form.display_name ? form.display_name.value.trim() : ''
+    }).then(function () {
+      setStatus(statusEl, 'Account created. Redirecting...', false);
+      window.location.href = './account.html';
+    }).catch(function (err) {
+      setStatus(statusEl, err.message || 'Registration failed.', true);
+    });
+  });
+}
+
+function initForgotForm() {
+  var form = document.querySelector('[data-portal-forgot]');
+  if (!form) return;
+  var statusEl = form.querySelector('[data-portal-status]');
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    sdk.forgotPassword(form.email.value.trim()).then(function (res) {
+      setStatus(statusEl, (res && res.message) || 'If an account exists, reset instructions have been sent.', false);
+    }).catch(function (err) {
+      setStatus(statusEl, err.message || 'Request failed.', true);
+    });
+  });
+}
+
+function initAccountPage() {
+  var root = document.querySelector('[data-portal-account]');
+  if (!root) return;
+
+  if (!sdk.isAuthenticated() && sdk.mode === 'live') {
+    window.location.href = './login.html';
+    return;
+  }
+
+  var state = { accessKey: '', revealed: false };
+  var statusEl = root.querySelector('[data-portal-status]');
+
+  function renderDevices(data) {
+    var countEl = root.querySelector('[data-devices-count]');
+    var barEl = root.querySelector('[data-devices-bar]');
+    var listEl = root.querySelector('[data-devices-list]');
+    var limit = (data && data.limit) || 5;
+    var devices = (data && data.devices) || [];
+    var used = devices.length;
+    if (countEl) countEl.textContent = used + ' / ' + limit;
+    if (barEl) barEl.style.width = Math.min(100, Math.round((used / limit) * 100)) + '%';
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    if (!devices.length) {
+      listEl.innerHTML = '<tr><td colspan="4">No devices connected yet.</td></tr>';
+      return;
+    }
+    devices.forEach(function (dev) {
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td></td><td></td><td></td><td><button type="button" class="button button--secondary">Revoke</button></td>';
+      tr.children[0].textContent = dev.device_name || dev.device_uid;
+      tr.children[1].textContent = dev.platform || 'unknown';
+      tr.children[2].textContent = dev.last_seen_at ? new Date(dev.last_seen_at).toLocaleDateString() : '—';
+      tr.querySelector('button').addEventListener('click', function () {
+        sdk.revokeDevice(state.accessKey, dev.device_uid).then(function () {
+          return sdk.getDevices(state.accessKey);
+        }).then(renderDevices).catch(function (err) {
+          setStatus(statusEl, err.message || 'Could not revoke device.', true);
+        });
+      });
+      listEl.appendChild(tr);
+    });
+  }
+
+  function renderServers(servers) {
+    var listEl = root.querySelector('[data-servers-list]');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    if (!servers || !servers.length) {
+      listEl.innerHTML = '<tr><td colspan="4">No servers available for this subscription.</td></tr>';
+      return;
+    }
+    servers.forEach(function (srv) {
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td></td><td></td><td></td><td></td>';
+      tr.children[0].textContent = (srv.country_code || '') + ' — ' + srv.name + (srv.is_recommended ? ' ★' : '');
+      tr.children[1].textContent = srv.status || 'online';
+      tr.children[2].textContent = srv.ping_ms ? srv.ping_ms + ' ms' : '—';
+      tr.children[3].textContent = (srv.protocols || []).map(function (p) { return p.type; }).join(', ');
+      listEl.appendChild(tr);
+    });
+  }
+
+  function renderBilling(payments) {
+    var listEl = root.querySelector('[data-billing-list]');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    if (!payments || !payments.length) {
+      listEl.innerHTML = '<tr><td colspan="4">No payments yet.</td></tr>';
+      return;
+    }
+    payments.forEach(function (p) {
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td></td><td></td><td></td><td></td>';
+      tr.children[0].textContent = p.paid_at ? new Date(p.paid_at).toLocaleDateString() : '—';
+      tr.children[1].textContent = p.plan_code;
+      tr.children[2].textContent = '€' + ((p.final_amount_minor || 0) / 100).toFixed(2);
+      tr.children[3].textContent = p.status;
+      listEl.appendChild(tr);
+    });
+  }
+
+  Promise.all([sdk.getMe(), sdk.getSubscription(), sdk.getBillingHistory()]).then(function (results) {
+    var me = results[0];
+    var subRes = results[1];
+    var billRes = results[2];
+    var client = me && me.client;
+    var sub = subRes && subRes.subscription;
+
+    if (client) {
+      var nameInput = root.querySelector('[name="display_name"]');
+      var emailEl = root.querySelector('[data-profile-email]');
+      if (nameInput) nameInput.value = client.display_name || '';
+      if (emailEl) emailEl.textContent = client.email;
+    }
+
+    if (sub) {
+      var planEl = root.querySelector('[data-sub-plan]');
+      var statusBadge = root.querySelector('[data-sub-status]');
+      var expEl = root.querySelector('[data-sub-expires]');
+      if (planEl) planEl.textContent = sub.plan_name + ' (' + sub.access_tier + ')';
+      if (statusBadge) statusBadge.textContent = sub.status;
+      if (expEl) expEl.textContent = sub.expires_at ? new Date(sub.expires_at).toLocaleDateString() : '—';
+
+      state.accessKey = sub.access_key || '';
+      var keyEl = root.querySelector('[data-vpn-key]');
+      if (keyEl) keyEl.textContent = maskKey(state.accessKey);
+
+      sdk.getBootstrap(state.accessKey).then(function (boot) {
+        renderServers(boot.servers || []);
+      }).catch(function (err) {
+        if (err.code === 'KEY_EXPIRED') {
+          setStatus(statusEl, 'Your VPN subscription has expired. Please renew your plan.', true);
+        }
+      });
+
+      sdk.getDevices(state.accessKey).then(renderDevices).catch(function () { /* ignore */ });
+    }
+
+    renderBilling(billRes && billRes.payments);
+  }).catch(function (err) {
+    setStatus(statusEl, err.message || 'Could not load account data.', true);
+  });
+
+  var revealBtn = root.querySelector('[data-key-reveal]');
+  if (revealBtn) {
+    revealBtn.addEventListener('click', function () {
+      state.revealed = !state.revealed;
+      var keyEl = root.querySelector('[data-vpn-key]');
+      if (keyEl) keyEl.textContent = state.revealed ? state.accessKey : maskKey(state.accessKey);
+      revealBtn.textContent = state.revealed ? 'Hide' : 'Show';
+    });
+  }
+
+  var copyBtn = root.querySelector('[data-key-copy]');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', function () {
+      if (navigator.clipboard && state.accessKey) {
+        navigator.clipboard.writeText(state.accessKey).then(function () {
+          setStatus(statusEl, 'VPN key copied to clipboard.', false);
+        });
+      }
+    });
+  }
+
+  var profileForm = root.querySelector('[data-profile-form]');
+  if (profileForm) {
+    profileForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      sdk.updateProfile({ display_name: profileForm.display_name.value.trim() }).then(function () {
+        setStatus(statusEl, 'Profile updated.', false);
+      }).catch(function (err) {
+        setStatus(statusEl, err.message || 'Update failed.', true);
+      });
+    });
+  }
+
+  var passForm = root.querySelector('[data-password-form]');
+  if (passForm) {
+    passForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      sdk.changePassword({
+        current_password: passForm.current_password.value,
+        password: passForm.password.value,
+        password_confirmation: passForm.password_confirmation.value
+      }).then(function () {
+        passForm.reset();
+        setStatus(statusEl, 'Password updated.', false);
+      }).catch(function (err) {
+        setStatus(statusEl, err.message || 'Password update failed.', true);
+      });
+    });
+  }
+
+  var supportForm = root.querySelector('[data-support-form]');
+  if (supportForm) {
+    supportForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      sdk.createSupportTicket({
+        subject: supportForm.subject.value.trim(),
+        message: supportForm.message.value.trim()
+      }).then(function () {
+        supportForm.reset();
+        setStatus(statusEl, 'Support request submitted.', false);
+      }).catch(function (err) {
+        setStatus(statusEl, err.message || 'Could not submit request.', true);
+      });
+    });
+  }
+
+  var logoutBtn = root.querySelector('[data-logout]');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', function () {
+      sdk.logout().then(function () { window.location.href = './login.html'; });
+    });
+  }
+
+  var logoutAllBtn = root.querySelector('[data-logout-all]');
+  if (logoutAllBtn) {
+    logoutAllBtn.addEventListener('click', function () {
+      sdk.logoutAll().then(function () { window.location.href = './login.html'; });
+    });
+  }
+}
+
+initLoginForm();
+initRegisterForm();
+initForgotForm();
+initAccountPage();
