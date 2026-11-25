@@ -988,7 +988,10 @@ async function mountPaymentProviderSelector(sdk, container) {
       input.name = 'payment_provider';
       input.value = p.code;
       input.disabled = !enabled;
-      input.checked = enabled && p.code === prevChecked;
+      const isChecked = enabled && p.code === prevChecked;
+      input.checked = isChecked;
+      input.defaultChecked = isChecked;
+      if (isChecked) input.setAttribute('checked', '');
 
       const span = document.createElement('span');
       span.textContent = p.label || formatPaymentProvider(p.code);
