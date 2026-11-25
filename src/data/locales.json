@@ -97,7 +97,11 @@
     "pricing.plans.3.features.2": "Advanced features",
     "pricing.plans.3.features.3": "Ad blocker",
     "pricing.plans.3.features.4": "Password manager",
-    "pricing.plans.3.features.5": "Data cloud"
+    "pricing.plans.3.features.5": "Data cloud",
+    "nav.account": "Account",
+    "nav.login": "Log in",
+    "nav.createAccount": "Create account",
+    "nav.forgotPassword": "Forgot password"
   },
   "ru": {
     "nav.home": "Nordel — главная",
@@ -197,7 +201,11 @@
     "pricing.plans.3.features.2": "Расширенные возможности",
     "pricing.plans.3.features.3": "Блокировщик рекламы",
     "pricing.plans.3.features.4": "Менеджер паролей",
-    "pricing.plans.3.features.5": "Облако данных"
+    "pricing.plans.3.features.5": "Облако данных",
+    "nav.account": "Аккаунт",
+    "nav.login": "Войти",
+    "nav.createAccount": "Регистрация",
+    "nav.forgotPassword": "Забыли пароль?"
   },
   "pl": {
     "nav.home": "Strona główna Nordel",
@@ -297,7 +305,11 @@
     "pricing.plans.3.features.2": "Zaawansowane funkcje",
     "pricing.plans.3.features.3": "Bloker reklam",
     "pricing.plans.3.features.4": "Menedżer haseł",
-    "pricing.plans.3.features.5": "Chmura danych"
+    "pricing.plans.3.features.5": "Chmura danych",
+    "nav.account": "Konto",
+    "nav.login": "Zaloguj się",
+    "nav.createAccount": "Utwórz konto",
+    "nav.forgotPassword": "Nie pamiętasz hasła?"
   },
   "uk": {
     "nav.home": "Головна Nordel",
@@ -397,7 +409,11 @@
     "pricing.plans.3.features.2": "Розширені функції",
     "pricing.plans.3.features.3": "Блокувальник реклами",
     "pricing.plans.3.features.4": "Менеджер паролів",
-    "pricing.plans.3.features.5": "Хмарне сховище"
+    "pricing.plans.3.features.5": "Хмарне сховище",
+    "nav.account": "Акаунт",
+    "nav.login": "Увійти",
+    "nav.createAccount": "Реєстрація",
+    "nav.forgotPassword": "Забули пароль?"
   },
   "lt": {
     "nav.home": "Nordel pradžia",
@@ -497,7 +513,11 @@
     "pricing.plans.3.features.2": "Pažangios funkcijos",
     "pricing.plans.3.features.3": "Reklamų blokatorius",
     "pricing.plans.3.features.4": "Slaptažodžių tvarkyklė",
-    "pricing.plans.3.features.5": "Duomenų debesis"
+    "pricing.plans.3.features.5": "Duomenų debesis",
+    "nav.account": "Paskyra",
+    "nav.login": "Prisijungti",
+    "nav.createAccount": "Sukurti paskyrą",
+    "nav.forgotPassword": "Pamiršote slaptažodį?"
   },
   "tr": {
     "nav.home": "Nordel ana sayfa",
@@ -597,7 +617,11 @@
     "pricing.plans.3.features.2": "Gelişmiş özellikler",
     "pricing.plans.3.features.3": "Reklam engelleyici",
     "pricing.plans.3.features.4": "Parola yöneticisi",
-    "pricing.plans.3.features.5": "Veri bulutu"
+    "pricing.plans.3.features.5": "Veri bulutu",
+    "nav.account": "Hesap",
+    "nav.login": "Giriş yap",
+    "nav.createAccount": "Hesap oluştur",
+    "nav.forgotPassword": "Şifremi unuttum"
   },
   "ro": {
     "nav.home": "Acasă Nordel",
@@ -697,7 +721,11 @@
     "pricing.plans.3.features.2": "Funcții avansate",
     "pricing.plans.3.features.3": "Blocare reclame",
     "pricing.plans.3.features.4": "Manager de parole",
-    "pricing.plans.3.features.5": "Cloud de date"
+    "pricing.plans.3.features.5": "Cloud de date",
+    "nav.account": "Cont",
+    "nav.login": "Autentificare",
+    "nav.createAccount": "Creează cont",
+    "nav.forgotPassword": "Ai uitat parola?"
   },
   "de": {
     "nav.home": "Nordel Startseite",
@@ -797,7 +825,11 @@
     "pricing.plans.3.features.2": "Erweiterte Funktionen",
     "pricing.plans.3.features.3": "Werbeblocker",
     "pricing.plans.3.features.4": "Passwortmanager",
-    "pricing.plans.3.features.5": "Daten-Cloud"
+    "pricing.plans.3.features.5": "Daten-Cloud",
+    "nav.account": "Konto",
+    "nav.login": "Anmelden",
+    "nav.createAccount": "Konto erstellen",
+    "nav.forgotPassword": "Passwort vergessen?"
   },
   "sk": {
     "nav.home": "Domov Nordel",
@@ -897,7 +929,11 @@
     "pricing.plans.3.features.2": "Pokročilé funkcie",
     "pricing.plans.3.features.3": "Blokovanie reklám",
     "pricing.plans.3.features.4": "Správca hesiel",
-    "pricing.plans.3.features.5": "Dátový cloud"
+    "pricing.plans.3.features.5": "Dátový cloud",
+    "nav.account": "Účet",
+    "nav.login": "Prihlásiť sa",
+    "nav.createAccount": "Vytvoriť účet",
+    "nav.forgotPassword": "Zabudnuté heslo?"
   },
   "hr": {
     "nav.home": "Nordel početna",
@@ -997,7 +1033,11 @@
     "pricing.plans.3.features.2": "Napredne značajke",
     "pricing.plans.3.features.3": "Blokator oglasa",
     "pricing.plans.3.features.4": "Upravitelj lozinki",
-    "pricing.plans.3.features.5": "Oblak podataka"
+    "pricing.plans.3.features.5": "Oblak podataka",
+    "nav.account": "Račun",
+    "nav.login": "Prijava",
+    "nav.createAccount": "Izradi račun",
+    "nav.forgotPassword": "Zaboravljena lozinka?"
   },
   "sr": {
     "nav.home": "Nordel početna",
@@ -1097,7 +1137,11 @@
     "pricing.plans.3.features.2": "Napredne funkcije",
     "pricing.plans.3.features.3": "Bloker oglasa",
     "pricing.plans.3.features.4": "Menadžer lozinki",
-    "pricing.plans.3.features.5": "Oblak podataka"
+    "pricing.plans.3.features.5": "Oblak podataka",
+    "nav.account": "Налог",
+    "nav.login": "Пријава",
+    "nav.createAccount": "Направи налог",
+    "nav.forgotPassword": "Заборављена лозинка?"
   },
   "bg": {
     "nav.home": "Начало Nordel",
@@ -1197,7 +1241,11 @@
     "pricing.plans.3.features.2": "Разширени функции",
     "pricing.plans.3.features.3": "Блокер на реклами",
     "pricing.plans.3.features.4": "Мениджър на пароли",
-    "pricing.plans.3.features.5": "Облачно хранилище"
+    "pricing.plans.3.features.5": "Облачно хранилище",
+    "nav.account": "Акаунт",
+    "nav.login": "Вход",
+    "nav.createAccount": "Регистрация",
+    "nav.forgotPassword": "Забравена парола?"
   },
   "hu": {
     "nav.home": "Nordel kezdőlap",
@@ -1297,6 +1345,10 @@
     "pricing.plans.3.features.2": "Haladó funkciók",
     "pricing.plans.3.features.3": "Reklámblokkoló",
     "pricing.plans.3.features.4": "Jelszókezelő",
-    "pricing.plans.3.features.5": "Adatfelhő"
+    "pricing.plans.3.features.5": "Adatfelhő",
+    "nav.account": "Fiók",
+    "nav.login": "Bejelentkezés",
+    "nav.createAccount": "Fiók létrehozása",
+    "nav.forgotPassword": "Elfelejtett jelszó?"
   }
 }

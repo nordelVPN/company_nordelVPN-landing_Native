@@ -3,12 +3,17 @@
     <a class="logo" href="./index.html" aria-label="Nordel home" data-i18n-aria-label="nav.home">{{> logo}}</a>
     <button class="menu-toggle" type="button" aria-label="Open navigation" data-i18n-aria-label="nav.open" aria-expanded="false" aria-controls="main-nav" data-menu-toggle>☰</button>
     <nav class="nav" id="main-nav" aria-label="Main navigation" data-i18n-aria-label="nav.main">
-      <a href="./index.html#why-nordel" data-i18n="nav.why">Why Nordel</a><a href="./index.html#app" data-i18n="nav.app">The app</a><a href="./index.html#pricing" data-i18n="nav.start">Get started</a>
+      <a href="./index.html#why-nordel" data-i18n="nav.why">Why Nordel</a>
+      <a href="./index.html#app" data-i18n="nav.app">The app</a>
+      <a href="./index.html#pricing" data-i18n="nav.start">Get started</a>
+      <a href="./login.html" data-i18n="nav.login">Log in</a>
+      <a href="./create-account.html" data-i18n="nav.createAccount">Create account</a>
+      <a href="./forgot-password.html" data-i18n="nav.forgotPassword">Forgot password</a>
     </nav>
     <div class="header-actions">
       <button class="theme-toggle" type="button" data-theme-toggle aria-label="Dark theme" data-i18n-aria-label="theme.dark" aria-pressed="false">☉</button>
       <label class="language"><span class="sr-only" data-i18n="language.label">Language</span><select data-language-select aria-label="Language" data-i18n-aria-label="language.label"><option value="en" data-i18n="language.name">EN</option></select></label>
-      <a class="header-explore" href="./login.html">Account</a>
+      <a class="header-explore" href="./account.html" data-i18n="nav.account">Account</a>
       {{#if landing}}<button class="button" type="button" data-wishlist-open><span data-i18n="nav.discover">Discover Nordel</span> <span aria-hidden="true">↗</span></button>{{else}}<a class="button" href="./index.html#pricing"><span data-i18n="nav.discover">Discover Nordel</span> ↗</a>{{/if}}
     </div>
   </div>
