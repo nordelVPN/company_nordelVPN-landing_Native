@@ -142,6 +142,24 @@ function initForgotAndResetForms() {
 }
 
 function initCheckoutAction() {
+  sdkFactory.initCheckoutReturnPolling(sdk);
+
+  var getProvider = function () { return null; };
+  var pricingSection = document.querySelector('#pricing .container, #pricing');
+  if (pricingSection) {
+    var providerHost = document.querySelector('[data-payment-providers]');
+    if (!providerHost) {
+      providerHost = document.createElement('div');
+      providerHost.className = 'payment-providers';
+      providerHost.setAttribute('data-payment-providers', '');
+      providerHost.hidden = true;
+      pricingSection.insertBefore(providerHost, pricingSection.firstChild);
+    }
+    sdkFactory.mountPaymentProviderSelector(sdk, providerHost).then(function (getter) {
+      if (typeof getter === 'function') getProvider = getter;
+    });
+  }
+
   document.addEventListener('click', function (e) {
     var btn = e.target && e.target.closest && e.target.closest('[data-checkout-plan]');
     if (!btn || sdk.mode !== 'live') return;
@@ -151,8 +169,15 @@ function initCheckoutAction() {
     }
     e.preventDefault();
     var planCode = btn.getAttribute('data-checkout-plan');
-    sdk.checkout({ plan_code: planCode }).then(function () {
-      window.location.href = './account.html';
+    var baseUrl = window.location.origin + window.location.pathname;
+    sdk.checkout({
+      plan_code: planCode,
+      provider: getProvider(),
+      return_url: baseUrl,
+      cancel_url: baseUrl + '?status=cancelled'
+    }).then(function (res) {
+      var target = res && res.checkout && res.checkout.checkout_url;
+      window.location.href = target || './account.html';
     }).catch(function () {
       window.location.href = './account.html';
     });
@@ -236,7 +261,7 @@ function initAccountPage() {
       tr.children[0].textContent = p.paid_at ? new Date(p.paid_at).toLocaleDateString() : '—';
       tr.children[1].textContent = p.plan_code;
       tr.children[2].textContent = '€' + ((p.final_amount_minor || 0) / 100).toFixed(2);
-      tr.children[3].textContent = p.status;
+      tr.children[3].textContent = sdkFactory.formatPaymentProvider(p.provider) + ' · ' + sdkFactory.formatPaymentStatus(p.status);
       listEl.appendChild(tr);
     });
   }
