@@ -953,4 +953,4 @@ function initCheckoutReturnPolling(sdk, options = {}) {
   return false;
 }
 
-module.exports = { VpnPortalSDK, PortalApiError, createVpnPortalSdk, formatEurMinor, resolvePortalConfig, formatPaymentProvider, formatPaymentStatus, mountPaymentProviderSelector, initCheckoutReturnPolling };
+module.exports = { VpnPortalSDK, PortalApiError, createVpnPortalSdk, formatPaymentProvider, formatPaymentStatus, mountPaymentProviderSelector, initCheckoutReturnPolling };
