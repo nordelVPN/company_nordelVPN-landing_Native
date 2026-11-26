@@ -1206,6 +1206,23 @@ function initCheckoutReturnPolling(sdk, options = {}) {
   return false;
 }
 
+function syncAccountNavLinks(sdk) {
+  if (typeof document === 'undefined' || !sdk) return;
+  const target = (sdk.isAuthenticated() || sdk.mode === 'demo') ? './account.html' : './login.html';
+  document.querySelectorAll('a[data-account-link]').forEach((link) => {
+    link.setAttribute('href', target);
+  });
+}
+
+function revealAuthGate() {
+  if (typeof document === 'undefined') return;
+  document.querySelectorAll('[data-auth-gate]').forEach((el) => {
+    el.hidden = false;
+    el.removeAttribute('hidden');
+    el.classList.remove('is-auth-pending');
+  });
+}
+
 module.exports = {
   VpnPortalSDK,
   PortalApiError,
@@ -1219,4 +1236,6 @@ module.exports = {
   mountPaymentProviderSelector,
   handleCheckoutResponse,
   initCheckoutReturnPolling,
+  syncAccountNavLinks,
+  revealAuthGate,
 };

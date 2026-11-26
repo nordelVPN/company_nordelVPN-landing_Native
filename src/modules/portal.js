@@ -3,6 +3,7 @@
 
 var sdkFactory = require('./vpn-portal-sdk');
 var sdk = sdkFactory.createVpnPortalSdk({ brandSlug: 'nordel' });
+sdkFactory.syncAccountNavLinks(sdk);
 
 function setStatus(el, msg, isError) {
   if (!el) return;
@@ -198,7 +199,7 @@ function initAccountPage() {
   if (!root) return;
 
   if (!sdk.isAuthenticated() && sdk.mode === 'live') {
-    window.location.href = './login.html';
+    window.location.replace('./login.html');
     return;
   }
 
@@ -280,9 +281,13 @@ function initAccountPage() {
       var me = results[0];
       var subRes = results[1];
       var billRes = results[2];
+      var authGate = document.querySelector('[data-auth-gate]');
+      if (authGate) authGate.hidden = false;
+
       var client = me && me.client;
       var sub = subRes && subRes.subscription;
 
+      sdkFactory.revealAuthGate();
       if (client) {
         var nameInput = root.querySelector('[name="display_name"]');
         var emailEl = root.querySelector('[data-profile-email]');
@@ -329,6 +334,11 @@ function initAccountPage() {
 
       renderBilling(billRes && billRes.payments);
     }).catch(function (err) {
+      if (sdk.mode === 'live' && (!sdk.isAuthenticated() || (err && (err.status === 401 || err.code === 'UNAUTHORIZED')))) {
+        window.location.replace('./login.html');
+        return;
+      }
+      sdkFactory.revealAuthGate();
       setStatus(statusEl, err.message || 'Could not load account data.', true);
     });
   }
