@@ -4,6 +4,10 @@
 var sdkFactory = require('./vpn-portal-sdk');
 var sdk = sdkFactory.createVpnPortalSdk({ brandSlug: 'nordel' });
 sdkFactory.syncAccountNavLinks(sdk);
+var siteConfigPromise = sdk.getSiteConfig();
+var cachedPlans = [];
+var currentSiteConfig = null;
+siteConfigPromise.then(function (cfg) { currentSiteConfig = cfg; });
 
 function setStatus(el, msg, isError) {
   if (!el) return;
@@ -23,29 +27,52 @@ function formatEur(minor) {
 }
 
 function initLandingLiveFeed() {
-  if (sdk.mode !== 'live') return;
   var pricing = document.querySelector('#pricing');
   if (!pricing) return;
 
-  sdk.getPublicPlans().then(function (res) {
-    var plans = (res && res.plans) || [];
-    var cards = pricing.querySelectorAll('.plan');
-    plans.forEach(function (plan, idx) {
-      var card = cards[idx];
-      if (!card) return;
-      var strong = card.querySelector('.plan-price strong');
-      if (strong) strong.textContent = formatEur(plan.price_minor);
-      var btn = card.querySelector('button');
-      if (btn) btn.setAttribute('data-checkout-plan', plan.plan_code);
-    });
-  }).catch(function () { /* keep static fallback */ });
+  var planFallbackCodes = ['trial', 'basic', 'plus', 'complete'];
+  pricing.querySelectorAll('.plan').forEach(function (card, idx) {
+    var btn = card.querySelector('button');
+    var nameEl = card.querySelector('h3');
+    var code = (btn && btn.getAttribute('data-checkout-plan')) || planFallbackCodes[idx] || ('plan_' + idx);
+    if (btn && !btn.getAttribute('data-checkout-plan')) {
+      btn.setAttribute('data-checkout-plan', code);
+    }
+    cachedPlans.push({ plan_code: code, name: nameEl ? nameEl.textContent.trim() : code });
+  });
 
-  sdk.getPublicServersCatalog().then(function (res) {
-    var servers = (res && (res.servers || res.locations || res.data)) || [];
-    if (!servers.length) return;
-    pricing.setAttribute('data-live-servers-count', String(servers.length));
-    sdkFactory.renderLiveServersStrip(pricing.querySelector('.container') || pricing, servers);
-  }).catch(function () { /* optional */ });
+  if (sdk.mode === 'live') {
+    sdk.getPublicPlans().then(function (res) {
+      var plans = (res && res.plans) || [];
+      if (plans.length) {
+        cachedPlans = plans.map(function (p) { return { plan_code: p.plan_code, name: p.name || p.plan_code }; });
+      }
+      var cards = pricing.querySelectorAll('.plan');
+      plans.forEach(function (plan, idx) {
+        var card = cards[idx];
+        if (!card) return;
+        var strong = card.querySelector('.plan-price strong');
+        if (strong) strong.textContent = formatEur(plan.price_minor);
+        var btn = card.querySelector('button');
+        if (btn) btn.setAttribute('data-checkout-plan', plan.plan_code);
+      });
+    }).catch(function () { /* keep static fallback */ });
+  }
+
+  siteConfigPromise.then(function (cfg) {
+    if (!sdkFactory.isSiteServersEnabled(cfg)) {
+      var strip = document.querySelector('[data-live-servers-strip]');
+      if (strip) strip.hidden = true;
+      return;
+    }
+    if (sdk.mode !== 'live') return;
+    sdk.getPublicServersCatalog().then(function (res) {
+      var servers = (res && (res.servers || res.locations || res.data)) || [];
+      if (!servers.length) return;
+      pricing.setAttribute('data-live-servers-count', String(servers.length));
+      sdkFactory.renderLiveServersStrip(pricing.querySelector('.container') || pricing, servers);
+    }).catch(function () { /* optional */ });
+  });
 }
 
 function initLoginForm() {
@@ -72,6 +99,11 @@ function initLoginForm() {
 function initRegisterForm() {
   var form = document.querySelector('[data-portal-register]');
   if (!form) return;
+  siteConfigPromise.then(function (cfg) {
+    if (sdkFactory.isSiteInWishlistMode(cfg)) {
+      sdkFactory.mountRegisterWishlistBanner(form, cfg);
+    }
+  });
   var statusEl = form.querySelector('[data-portal-status]');
   form.addEventListener('submit', function (e) {
     e.preventDefault();
@@ -151,28 +183,48 @@ function initCheckoutAction() {
 
   var getProvider = function () { return null; };
   var pricingSection = document.querySelector('#pricing .container, #pricing');
-  if (pricingSection) {
-    var providerHost = document.querySelector('[data-payment-providers]');
-    if (!providerHost) {
-      providerHost = document.createElement('div');
-      providerHost.className = 'payment-providers';
-      providerHost.setAttribute('data-payment-providers', '');
-      providerHost.hidden = true;
-      pricingSection.insertBefore(providerHost, pricingSection.firstChild);
+  var providerHost = document.querySelector('[data-payment-providers]');
+  siteConfigPromise.then(function (cfg) {
+    if (!sdkFactory.isSiteCheckoutEnabled(cfg)) {
+      if (providerHost) providerHost.hidden = true;
+      return;
     }
-    sdkFactory.mountPaymentProviderSelector(sdk, providerHost).then(function (getter) {
-      if (typeof getter === 'function') getProvider = getter;
-    });
-  }
+    if (pricingSection) {
+      if (!providerHost) {
+        providerHost = document.createElement('div');
+        providerHost.className = 'payment-providers';
+        providerHost.setAttribute('data-payment-providers', '');
+        providerHost.hidden = true;
+        pricingSection.insertBefore(providerHost, pricingSection.firstChild);
+      }
+      sdkFactory.mountPaymentProviderSelector(sdk, providerHost).then(function (getter) {
+        if (typeof getter === 'function') getProvider = getter;
+      });
+    }
+  });
 
   document.addEventListener('click', function (e) {
-    var btn = e.target && e.target.closest && e.target.closest('[data-checkout-plan]');
-    if (!btn || sdk.mode !== 'live') return;
+    var btn = e.target && e.target.closest && e.target.closest('[data-checkout-plan], [data-wishlist-open]');
+    if (!btn) return;
+    if (currentSiteConfig && !sdkFactory.isSiteCheckoutEnabled(currentSiteConfig)) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      sdkFactory.openWishlistModal(sdk, {
+        siteConfig: currentSiteConfig,
+        planCode: btn.getAttribute('data-checkout-plan') || '',
+        plans: cachedPlans,
+        sourcePage: 'index',
+        variant: 'modal'
+      });
+      return;
+    }
+    if (!btn.hasAttribute('data-checkout-plan') || sdk.mode !== 'live') return;
     if (!sdk.isAuthenticated()) {
       window.location.href = './login.html';
       return;
     }
     e.preventDefault();
+    e.stopImmediatePropagation();
     var planCode = btn.getAttribute('data-checkout-plan');
     var returnUrl = new URL('./account.html', window.location.href).href;
     var cancelUrl = new URL('./index.html?status=cancelled', window.location.href).href;
@@ -184,6 +236,20 @@ function initCheckoutAction() {
     }).then(function (res) {
       sdkFactory.handleCheckoutResponse(sdk, res);
     }).catch(function (err) {
+      if (err && (err.code === 'SITE_IN_WISHLIST_MODE' || err.status === 403)) {
+        if (providerHost) providerHost.hidden = true;
+        sdk.getSiteConfig({ force: true }).then(function (cfg) {
+          currentSiteConfig = cfg;
+          sdkFactory.openWishlistModal(sdk, {
+            siteConfig: cfg,
+            planCode: planCode || '',
+            plans: cachedPlans,
+            sourcePage: 'checkout',
+            variant: 'checkout'
+          });
+        });
+        return;
+      }
       var banner = document.querySelector('[data-portal-status]');
       if (banner) {
         setStatus(banner, (err && err.message) || 'Checkout failed.', true);
@@ -191,7 +257,7 @@ function initCheckoutAction() {
         window.location.href = './account.html';
       }
     });
-  });
+  }, true);
 }
 
 function initAccountPage() {
@@ -277,10 +343,12 @@ function initAccountPage() {
   }
 
   function loadAccountData() {
-    return Promise.all([sdk.getMe(), sdk.getSubscription(), sdk.getBillingHistory()]).then(function (results) {
+    return Promise.all([sdk.getMe(), sdk.getSubscription(), sdk.getBillingHistory(), siteConfigPromise]).then(function (results) {
       var me = results[0];
       var subRes = results[1];
       var billRes = results[2];
+      var siteCfg = results[3];
+      var serversAllowed = sdkFactory.isSiteServersEnabled(siteCfg);
       var authGate = document.querySelector('[data-auth-gate]');
       if (authGate) authGate.hidden = false;
 
@@ -295,6 +363,13 @@ function initAccountPage() {
         if (emailEl) emailEl.textContent = client.email;
       }
 
+      if (!serversAllowed) {
+        var vpnAccessBlock = root.querySelector('#vpn-access');
+        var devicesBlock = root.querySelector('#devices');
+        if (vpnAccessBlock) vpnAccessBlock.hidden = true;
+        if (devicesBlock) devicesBlock.hidden = true;
+        sdkFactory.mountAccountWaitlistCard(vpnAccessBlock || root, siteCfg, { className: 'account-block' });
+      }
       if (sub) {
         var planEl = root.querySelector('[data-sub-plan]');
         var statusBadge = root.querySelector('[data-sub-status]');
@@ -307,7 +382,7 @@ function initAccountPage() {
         var keyEl = root.querySelector('[data-vpn-key]');
         if (keyEl) keyEl.textContent = state.revealed ? state.accessKey : maskKey(state.accessKey);
 
-        if (state.accessKey) {
+        if (state.accessKey && serversAllowed) {
           sdk.getBootstrap(state.accessKey).then(function (boot) {
             renderServers(boot.servers || []);
           }).catch(function (err) {
