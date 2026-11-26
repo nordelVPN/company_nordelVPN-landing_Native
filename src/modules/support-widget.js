@@ -659,13 +659,23 @@ function injectStyles() {
     '.vpn-sup-cta--primary:hover{background:var(--sup-accent-hover,var(--sup-accent));border-color:var(--sup-accent-hover,var(--sup-accent));transform:translateY(-1px);}',
     '.vpn-sup-cta--secondary{background:transparent;color:var(--sup-text);border:1px solid var(--sup-border);font-family:var(--sup-font);font-style:normal;font-weight:600;font-size:13.5px;}',
     '.vpn-sup-cta--secondary:hover{border-color:var(--sup-accent);background:var(--sup-chip-bg);}',
-    '.vpn-sup-msg{max-width:86%;padding:10px 13px;border-radius:var(--sup-radius-msg,12px);font-size:13.5px;line-height:1.48;white-space:pre-wrap;word-break:break-word;}',
+    '.vpn-sup-msg{max-width:86%;padding:10px 13px;border-radius:var(--sup-radius-msg,12px);font-size:13.5px;line-height:1.48;white-space:normal;word-break:break-word;}',
     '.vpn-sup-msg--client{align-self:flex-end;background:var(--sup-accent);color:var(--sup-on-accent);border-bottom-right-radius:3px;}',
     '.vpn-sup-msg--ai{align-self:flex-start;background:var(--sup-ai-bg);color:var(--sup-ai-text,var(--sup-text));border:1px solid var(--sup-border);border-bottom-left-radius:3px;}',
     '.vpn-sup-msg--operator{align-self:flex-start;background:var(--sup-op-bg);color:var(--sup-text);border:1px solid var(--sup-op-border);border-bottom-left-radius:3px;}',
     '.vpn-sup-msg--system{align-self:center;max-width:94%;font-size:12px;color:var(--sup-muted);background:var(--sup-sys-bg);border:1px solid var(--sup-border);padding:6px 10px;text-align:center;}',
     '.vpn-sup-msg__sender{font-size:11px;font-weight:700;opacity:.76;margin-bottom:3px;}',
+    '.vpn-sup-md{display:flex;flex-direction:column;gap:6px;}',
+    '.vpn-sup-md-p{margin:0;}',
+    '.vpn-sup-md-h{margin:2px 0 0;font-family:var(--sup-font-heading,var(--sup-font));font-weight:700;line-height:1.3;}',
+    '.vpn-sup-md-h--1{font-size:15.5px;}',
+    '.vpn-sup-md-h--2{font-size:14.5px;}',
+    '.vpn-sup-md-h--3{font-size:13.8px;}',
+    '.vpn-sup-md-ul,.vpn-sup-md-ol{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:3px;}',
+    '.vpn-sup-md-ul{list-style:disc;}',
+    '.vpn-sup-md-ol{list-style:decimal;}',
     '.vpn-sup-msg strong{font-weight:700;}',
+    '.vpn-sup-msg em{font-style:italic;}',
     '.vpn-sup-msg code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;padding:1px 5px;border-radius:4px;background:rgba(128,128,128,.18);}',
     '.vpn-sup-quick{display:flex;flex-wrap:wrap;gap:6px;padding:8px 14px 10px;background:var(--sup-body-bg,var(--sup-bg));border-top:1px solid var(--sup-border);}',
     '.vpn-sup-quick:empty{display:none;}',
@@ -682,36 +692,109 @@ function injectStyles() {
   document.head.appendChild(style);
 }
 
+function appendInlineMarkdown(parent, text) {
+  var input = String(text || '');
+  var tokenRegex = /(`[^`]+`|\*\*\*[^\s*](?:.*?[^\s*])?\*\*\*|\*\*[^\s*](?:.*?[^\s*])?\*\*|\*[^\s*](?:[^*]*?[^\s*])?\*)/g;
+  var lastIndex = 0;
+  var match;
+  while ((match = tokenRegex.exec(input)) !== null) {
+    if (match.index > lastIndex) {
+      parent.appendChild(document.createTextNode(input.slice(lastIndex, match.index)));
+    }
+    var token = match[0];
+    if (token.charAt(0) === '`' && token.charAt(token.length - 1) === '`') {
+      var codeEl = document.createElement('code');
+      codeEl.textContent = token.slice(1, -1);
+      parent.appendChild(codeEl);
+    } else if (token.slice(0, 3) === '***' && token.slice(-3) === '***' && token.length > 6) {
+      var strongEm = document.createElement('strong');
+      var innerEm = document.createElement('em');
+      innerEm.textContent = token.slice(3, -3);
+      strongEm.appendChild(innerEm);
+      parent.appendChild(strongEm);
+    } else if (token.slice(0, 2) === '**' && token.slice(-2) === '**' && token.length > 4) {
+      var strongEl = document.createElement('strong');
+      strongEl.textContent = token.slice(2, -2);
+      parent.appendChild(strongEl);
+    } else if (token.charAt(0) === '*' && token.charAt(token.length - 1) === '*' && token.length > 2) {
+      var emEl = document.createElement('em');
+      emEl.textContent = token.slice(1, -1);
+      parent.appendChild(emEl);
+    } else {
+      parent.appendChild(document.createTextNode(token));
+    }
+    lastIndex = tokenRegex.lastIndex;
+  }
+  if (lastIndex < input.length) {
+    parent.appendChild(document.createTextNode(input.slice(lastIndex)));
+  }
+}
+
 function renderFormattedText(container, raw) {
-  var lines = String(raw || '').split(/\r?\n/);
-  lines.forEach(function (line, lineIdx) {
-    if (lineIdx > 0) {
-      container.appendChild(document.createElement('br'));
+  var normalized = String(raw || '').replace(/\r\n?/g, '\n').trim();
+  if (!normalized) return;
+  if (container.className && container.className.indexOf('vpn-sup-md') === -1) {
+    container.className += ' vpn-sup-md';
+  } else if (!container.className) {
+    container.className = 'vpn-sup-md';
+  }
+  var lines = normalized.split('\n');
+  var i = 0;
+  while (i < lines.length) {
+    var line = lines[i];
+    if (!line.trim()) {
+      i += 1;
+      continue;
     }
-    var cleaned = line.replace(/^#{1,6}\s+/, '');
-    var tokenRegex = /(\*\*[^*]+\*\*|`[^`]+`)/g;
-    var lastIndex = 0;
-    var match;
-    while ((match = tokenRegex.exec(cleaned)) !== null) {
-      if (match.index > lastIndex) {
-        container.appendChild(document.createTextNode(cleaned.slice(lastIndex, match.index)));
+    var headingMatch = line.trim().match(/^(#{1,3})\s+(.+)$/);
+    if (headingMatch) {
+      var h = document.createElement('div');
+      h.className = 'vpn-sup-md-h vpn-sup-md-h--' + headingMatch[1].length;
+      appendInlineMarkdown(h, headingMatch[2].trim());
+      container.appendChild(h);
+      i += 1;
+      continue;
+    }
+    if (/^\s*[-*?]\s+.+$/.test(line)) {
+      var ul = document.createElement('ul');
+      ul.className = 'vpn-sup-md-ul';
+      while (i < lines.length && /^\s*[-*?]\s+(.+)$/.test(lines[i])) {
+        var ulLi = document.createElement('li');
+        appendInlineMarkdown(ulLi, lines[i].replace(/^\s*[-*?]\s+/, '').trim());
+        ul.appendChild(ulLi);
+        i += 1;
       }
-      var token = match[0];
-      if (token.slice(0, 2) === '**' && token.slice(-2) === '**') {
-        var strong = document.createElement('strong');
-        strong.textContent = token.slice(2, -2);
-        container.appendChild(strong);
-      } else if (token.charAt(0) === '`' && token.charAt(token.length - 1) === '`') {
-        var code = document.createElement('code');
-        code.textContent = token.slice(1, -1);
-        container.appendChild(code);
+      container.appendChild(ul);
+      continue;
+    }
+    if (/^\s*\d+[.)]\s+.+$/.test(line)) {
+      var ol = document.createElement('ol');
+      ol.className = 'vpn-sup-md-ol';
+      while (i < lines.length && /^\s*\d+[.)]\s+(.+)$/.test(lines[i])) {
+        var olLi = document.createElement('li');
+        appendInlineMarkdown(olLi, lines[i].replace(/^\s*\d+[.)]\s+/, '').trim());
+        ol.appendChild(olLi);
+        i += 1;
       }
-      lastIndex = tokenRegex.lastIndex;
+      container.appendChild(ol);
+      continue;
     }
-    if (lastIndex < cleaned.length) {
-      container.appendChild(document.createTextNode(cleaned.slice(lastIndex)));
+    var p = document.createElement('p');
+    p.className = 'vpn-sup-md-p';
+    var firstLine = true;
+    while (i < lines.length && lines[i].trim()) {
+      if (!firstLine && (/^(#{1,3})\s+.+$/.test(lines[i].trim()) || /^\s*[-*?]\s+.+$/.test(lines[i]) || /^\s*\d+[.)]\s+.+$/.test(lines[i]))) {
+        break;
+      }
+      if (!firstLine) {
+        p.appendChild(document.createElement('br'));
+      }
+      appendInlineMarkdown(p, lines[i]);
+      firstLine = false;
+      i += 1;
     }
-  });
+    container.appendChild(p);
+  }
 }
 
 function createChatIcon() {
