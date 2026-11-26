@@ -9,11 +9,18 @@ var cachedPlans = [];
 var currentSiteConfig = null;
 siteConfigPromise.then(function (cfg) { currentSiteConfig = cfg; });
 
-function setStatus(el, msg, isError) {
+function uiMsg() {
+  return sdkFactory.getPortalUiMessages();
+}
+
+function isValidEmail(val) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(val || '').trim());
+}
+
+function setStatus(el, msg, typeOrBool, options) {
   if (!el) return;
-  el.hidden = false;
-  el.textContent = msg;
-  el.className = 'portal-status ' + (isError ? 'portal-status--error' : 'portal-status--success');
+  var type = typeof typeOrBool === 'boolean' ? (typeOrBool ? 'error' : 'success') : (typeOrBool || 'info');
+  sdkFactory.setPortalStatus(el, msg, type, options);
 }
 
 function maskKey(key) {
@@ -78,20 +85,38 @@ function initLandingLiveFeed() {
 function initLoginForm() {
   var form = document.querySelector('[data-portal-login]');
   if (!form) return;
+  sdkFactory.bindFormValidationClear(form);
   var statusEl = form.querySelector('[data-portal-status]');
+  var submitBtn = form.querySelector('button[type="submit"]');
   form.addEventListener('submit', function (e) {
     e.preventDefault();
+    sdkFactory.clearFieldErrors(form);
     var email = form.email.value.trim();
     var password = form.password.value;
-    if (!email || !password) {
-      setStatus(statusEl, 'Please enter your email and password.', true);
+    var fieldErrs = {};
+    if (!isValidEmail(email)) fieldErrs.email = uiMsg().invalidEmail;
+    if (!password) fieldErrs.password = uiMsg().requiredField;
+    if (Object.keys(fieldErrs).length) {
+      sdkFactory.setFieldErrors(form, fieldErrs);
+      setStatus(statusEl, Object.values(fieldErrs)[0], 'error');
       return;
     }
-    sdk.login({ email: email, password: password }).then(function () {
-      setStatus(statusEl, 'Signed in. Redirecting to your account...', false);
-      window.location.href = './account.html';
-    }).catch(function (err) {
-      setStatus(statusEl, err.message || 'Sign in failed.', true);
+    setStatus(statusEl, uiMsg().loading, 'loading', { scroll: false });
+    sdkFactory.withFormBusy(form, submitBtn, function () {
+      return sdk.login({ email: email, password: password }).then(function () {
+        setStatus(statusEl, 'Signed in. Redirecting to your account...', 'success');
+        window.location.href = './account.html';
+      }).catch(function (err) {
+        if (err && err.details) {
+          sdkFactory.setFieldErrors(form, err.details);
+        } else if (err && err.status === 401) {
+          sdkFactory.setFieldErrors(form, {
+            email: sdkFactory.formatPortalApiError(err, uiMsg().unauthorized),
+            password: ' '
+          }, { focus: false });
+        }
+        setStatus(statusEl, sdkFactory.formatPortalApiError(err, 'Sign in failed.'), 'error');
+      });
     });
   });
 }
@@ -99,35 +124,45 @@ function initLoginForm() {
 function initRegisterForm() {
   var form = document.querySelector('[data-portal-register]');
   if (!form) return;
+  sdkFactory.bindFormValidationClear(form);
   siteConfigPromise.then(function (cfg) {
     if (sdkFactory.isSiteInWishlistMode(cfg)) {
       sdkFactory.mountRegisterWishlistBanner(form, cfg);
     }
   });
   var statusEl = form.querySelector('[data-portal-status]');
+  var submitBtn = form.querySelector('button[type="submit"]');
   form.addEventListener('submit', function (e) {
     e.preventDefault();
+    sdkFactory.clearFieldErrors(form);
     var email = form.email.value.trim();
     var password = form.password.value;
     var confirm = form.password_confirmation.value;
-    if (password.length < 8) {
-      setStatus(statusEl, 'Password must be at least 8 characters.', true);
+    var terms = form.accept_terms;
+    var fieldErrs = {};
+    if (!isValidEmail(email)) fieldErrs.email = uiMsg().invalidEmail;
+    if (password.length < 8) fieldErrs.password = uiMsg().passwordTooShort;
+    if (password !== confirm) fieldErrs.password_confirmation = uiMsg().passwordsMismatch;
+    if (terms && !terms.checked) fieldErrs.accept_terms = uiMsg().acceptTermsRequired;
+    if (Object.keys(fieldErrs).length) {
+      sdkFactory.setFieldErrors(form, fieldErrs);
+      setStatus(statusEl, Object.values(fieldErrs)[0], 'error');
       return;
     }
-    if (password !== confirm) {
-      setStatus(statusEl, 'Passwords do not match.', true);
-      return;
-    }
-    sdk.register({
-      email: email,
-      password: password,
-      password_confirmation: confirm,
-      display_name: form.display_name ? form.display_name.value.trim() : ''
-    }).then(function () {
-      setStatus(statusEl, 'Account created. Redirecting...', false);
-      window.location.href = './account.html';
-    }).catch(function (err) {
-      setStatus(statusEl, err.message || 'Registration failed.', true);
+    setStatus(statusEl, uiMsg().loading, 'loading', { scroll: false });
+    sdkFactory.withFormBusy(form, submitBtn, function () {
+      return sdk.register({
+        email: email,
+        password: password,
+        password_confirmation: confirm,
+        display_name: form.display_name ? form.display_name.value.trim() : ''
+      }).then(function () {
+        setStatus(statusEl, 'Account created. Redirecting...', 'success');
+        window.location.href = './account.html';
+      }).catch(function (err) {
+        if (err && err.details) sdkFactory.setFieldErrors(form, err.details);
+        setStatus(statusEl, sdkFactory.formatPortalApiError(err, 'Registration failed.'), 'error');
+      });
     });
   });
 }
@@ -142,37 +177,61 @@ function initForgotAndResetForms() {
     if (forgotForm) forgotForm.hidden = true;
     resetForm.hidden = false;
     resetForm.token.value = token;
+    sdkFactory.bindFormValidationClear(resetForm);
     var rStatus = resetForm.querySelector('[data-portal-status]');
+    var rBtn = resetForm.querySelector('button[type="submit"]');
     resetForm.addEventListener('submit', function (e) {
       e.preventDefault();
-      if (resetForm.password.value !== resetForm.password_confirmation.value) {
-        setStatus(rStatus, 'Passwords do not match.', true);
+      sdkFactory.clearFieldErrors(resetForm);
+      var pw = resetForm.password.value;
+      var confirm = resetForm.password_confirmation.value;
+      var fieldErrs = {};
+      if (pw.length < 8) fieldErrs.password = uiMsg().passwordTooShort;
+      if (pw !== confirm) fieldErrs.password_confirmation = uiMsg().passwordsMismatch;
+      if (Object.keys(fieldErrs).length) {
+        sdkFactory.setFieldErrors(resetForm, fieldErrs);
+        setStatus(rStatus, Object.values(fieldErrs)[0], 'error');
         return;
       }
-      sdk.resetPassword({
-        token: resetForm.token.value,
-        password: resetForm.password.value,
-        password_confirmation: resetForm.password_confirmation.value
-      }).then(function () {
-        setStatus(rStatus, 'Password updated. Redirecting to sign in...', false);
-        window.location.href = './login.html';
-      }).catch(function (err) {
-        setStatus(rStatus, err.message || 'Reset failed.', true);
+      setStatus(rStatus, uiMsg().loading, 'loading', { scroll: false });
+      sdkFactory.withFormBusy(resetForm, rBtn, function () {
+        return sdk.resetPassword({
+          token: resetForm.token.value,
+          password: pw,
+          password_confirmation: confirm
+        }).then(function () {
+          setStatus(rStatus, 'Password updated. Redirecting to sign in...', 'success');
+          window.location.href = './login.html';
+        }).catch(function (err) {
+          if (err && err.details) sdkFactory.setFieldErrors(resetForm, err.details);
+          setStatus(rStatus, sdkFactory.formatPortalApiError(err, 'Reset failed. Request a new reset link.'), 'error');
+        });
       });
     });
-    return;
-  }
-
-  if (!forgotForm) return;
-  var statusEl = forgotForm.querySelector('[data-portal-status]');
-  forgotForm.addEventListener('submit', function (e) {
-    e.preventDefault();
-    sdk.forgotPassword(forgotForm.email.value.trim()).then(function (res) {
-      setStatus(statusEl, (res && res.message) || 'If an account exists, reset instructions have been sent.', false);
-    }).catch(function (err) {
-      setStatus(statusEl, err.message || 'Request failed.', true);
+  } else if (forgotForm) {
+    sdkFactory.bindFormValidationClear(forgotForm);
+    var statusEl = forgotForm.querySelector('[data-portal-status]');
+    var fBtn = forgotForm.querySelector('button[type="submit"]');
+    forgotForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      sdkFactory.clearFieldErrors(forgotForm);
+      var email = forgotForm.email.value.trim();
+      if (!isValidEmail(email)) {
+        sdkFactory.setFieldErrors(forgotForm, { email: uiMsg().invalidEmail });
+        setStatus(statusEl, uiMsg().invalidEmail, 'error');
+        return;
+      }
+      setStatus(statusEl, uiMsg().loading, 'loading', { scroll: false });
+      sdkFactory.withFormBusy(forgotForm, fBtn, function () {
+        return sdk.forgotPassword(email).then(function (res) {
+          setStatus(statusEl, (res && res.message) || 'If an account exists, reset instructions have been sent.', 'success');
+        }).catch(function (err) {
+          if (err && err.details) sdkFactory.setFieldErrors(forgotForm, err.details);
+          setStatus(statusEl, sdkFactory.formatPortalApiError(err, 'Request failed.'), 'error');
+        });
+      });
     });
-  });
+  }
 }
 
 function initCheckoutAction() {
@@ -270,7 +329,9 @@ function initAccountPage() {
   }
 
   var state = { accessKey: '', revealed: false };
-  var statusEl = root.querySelector('[data-portal-status]');
+  var statusEl = root.querySelector('.portal-card > [data-portal-status]') || root.querySelector('[data-portal-status]');
+  var devicesStatusEl = root.querySelector('[data-devices-status]');
+  var vpnStatusEl = root.querySelector('[data-vpn-status]');
 
   function renderDevices(data) {
     var countEl = root.querySelector('[data-devices-count]');
@@ -293,11 +354,20 @@ function initAccountPage() {
       tr.children[0].textContent = dev.device_name || dev.device_uid;
       tr.children[1].textContent = dev.platform || 'unknown';
       tr.children[2].textContent = dev.last_seen_at ? new Date(dev.last_seen_at).toLocaleDateString() : '—';
-      tr.querySelector('button').addEventListener('click', function () {
+      var revokeBtn = tr.querySelector('button');
+      revokeBtn.addEventListener('click', function () {
+        if (revokeBtn.disabled) return;
+        revokeBtn.disabled = true;
+        revokeBtn.dataset.loading = 'true';
         sdk.revokeDevice(state.accessKey, dev.device_uid).then(function () {
           return sdk.getDevices(state.accessKey);
-        }).then(renderDevices).catch(function (err) {
-          setStatus(statusEl, err.message || 'Could not revoke device.', true);
+        }).then(function (res) {
+          renderDevices(res);
+          setStatus(devicesStatusEl || statusEl, 'Device revoked.', 'success', { scroll: false });
+        }).catch(function (err) {
+          revokeBtn.disabled = false;
+          delete revokeBtn.dataset.loading;
+          setStatus(devicesStatusEl || statusEl, sdkFactory.formatPortalApiError(err, 'Could not revoke device.'), 'error');
         });
       });
       listEl.appendChild(tr);
@@ -387,11 +457,11 @@ function initAccountPage() {
             renderServers(boot.servers || []);
           }).catch(function (err) {
             if (err.code === 'KEY_EXPIRED') {
-              setStatus(statusEl, 'Your VPN subscription has expired. Please renew your plan.', true);
+              setStatus(statusEl, uiMsg().keyExpired, 'warning');
             } else if (err.code === 'KEY_REVOKED') {
-              setStatus(statusEl, 'Your VPN key has been revoked. Please contact support.', true);
+              setStatus(statusEl, uiMsg().keyRevoked, 'error');
             } else if (err.code === 'DEVICE_LIMIT_REACHED' || err.status === 409) {
-              setStatus(statusEl, 'Device limit reached (5/5). Please revoke one of your connected devices below.', true);
+              setStatus(statusEl, uiMsg().deviceLimitReached, 'warning');
               var errDevices = err.payload && err.payload.error && err.payload.error.devices;
               if (Array.isArray(errDevices)) renderDevices({ limit: 5, devices: errDevices });
             }
@@ -439,55 +509,115 @@ function initAccountPage() {
   var copyBtn = root.querySelector('[data-key-copy]');
   if (copyBtn) {
     copyBtn.addEventListener('click', function () {
-      if (navigator.clipboard && state.accessKey) {
+      if (!state.accessKey) {
+        setStatus(vpnStatusEl || statusEl, 'VPN key is not available yet.', 'warning', { scroll: false });
+        return;
+      }
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
         navigator.clipboard.writeText(state.accessKey).then(function () {
-          setStatus(statusEl, 'VPN key copied to clipboard.', false);
+          setStatus(vpnStatusEl || statusEl, 'VPN key copied to clipboard.', 'success', { scroll: false });
+        }).catch(function () {
+          setStatus(vpnStatusEl || statusEl, 'Could not copy VPN key. Please copy it manually.', 'error', { scroll: false });
         });
+      } else {
+        setStatus(vpnStatusEl || statusEl, 'Clipboard is unavailable. Please copy the key manually.', 'warning', { scroll: false });
       }
     });
   }
 
   var profileForm = root.querySelector('[data-profile-form]');
   if (profileForm) {
+    sdkFactory.bindFormValidationClear(profileForm);
+    var pStatus = profileForm.querySelector('[data-profile-status]') || statusEl;
+    var pBtn = profileForm.querySelector('button[type="submit"]');
     profileForm.addEventListener('submit', function (e) {
       e.preventDefault();
-      sdk.updateProfile({ display_name: profileForm.display_name.value.trim() }).then(function () {
-        setStatus(statusEl, 'Profile updated.', false);
-      }).catch(function (err) {
-        setStatus(statusEl, err.message || 'Update failed.', true);
+      sdkFactory.clearFieldErrors(profileForm);
+      var displayName = profileForm.display_name ? profileForm.display_name.value.trim() : '';
+      if (!displayName) {
+        sdkFactory.setFieldErrors(profileForm, { display_name: uiMsg().requiredField });
+        setStatus(pStatus, uiMsg().requiredField, 'error');
+        return;
+      }
+      setStatus(pStatus, uiMsg().loading, 'loading', { scroll: false });
+      sdkFactory.withFormBusy(profileForm, pBtn, function () {
+        return sdk.updateProfile({ display_name: displayName }).then(function () {
+          setStatus(pStatus, 'Profile updated.', 'success');
+        }).catch(function (err) {
+          if (err && err.details) sdkFactory.setFieldErrors(profileForm, err.details);
+          setStatus(pStatus, sdkFactory.formatPortalApiError(err, 'Update failed.'), 'error');
+        });
       });
     });
   }
 
   var passForm = root.querySelector('[data-password-form]');
   if (passForm) {
+    sdkFactory.bindFormValidationClear(passForm);
+    var pwStatus = passForm.querySelector('[data-password-status]') || statusEl;
+    var pwBtn = passForm.querySelector('button[type="submit"]');
     passForm.addEventListener('submit', function (e) {
       e.preventDefault();
-      sdk.changePassword({
-        current_password: passForm.current_password.value,
-        password: passForm.password.value,
-        password_confirmation: passForm.password_confirmation.value
-      }).then(function () {
-        passForm.reset();
-        setStatus(statusEl, 'Password updated.', false);
-      }).catch(function (err) {
-        setStatus(statusEl, err.message || 'Password update failed.', true);
+      sdkFactory.clearFieldErrors(passForm);
+      var cur = passForm.current_password.value;
+      var nextPw = passForm.password.value;
+      var confirmPw = passForm.password_confirmation.value;
+      var fieldErrs = {};
+      if (!cur) fieldErrs.current_password = uiMsg().requiredField;
+      if (nextPw.length < 8) fieldErrs.password = uiMsg().passwordTooShort;
+      if (nextPw !== confirmPw) fieldErrs.password_confirmation = uiMsg().passwordsMismatch;
+      if (Object.keys(fieldErrs).length) {
+        sdkFactory.setFieldErrors(passForm, fieldErrs);
+        setStatus(pwStatus, Object.values(fieldErrs)[0], 'error');
+        return;
+      }
+      setStatus(pwStatus, uiMsg().loading, 'loading', { scroll: false });
+      sdkFactory.withFormBusy(passForm, pwBtn, function () {
+        return sdk.changePassword({
+          current_password: cur,
+          password: nextPw,
+          password_confirmation: confirmPw
+        }).then(function () {
+          passForm.reset();
+          setStatus(pwStatus, 'Password updated.', 'success');
+        }).catch(function (err) {
+          if (err && err.details) sdkFactory.setFieldErrors(passForm, err.details);
+          setStatus(pwStatus, sdkFactory.formatPortalApiError(err, 'Password update failed.'), 'error');
+        });
       });
     });
   }
 
   var supportForm = root.querySelector('[data-support-form]');
   if (supportForm) {
+    sdkFactory.bindFormValidationClear(supportForm);
+    var sStatus = supportForm.querySelector('[data-support-status]') || statusEl;
+    var sBtn = supportForm.querySelector('button[type="submit"]');
     supportForm.addEventListener('submit', function (e) {
       e.preventDefault();
-      sdk.createSupportTicket({
-        subject: supportForm.subject.value.trim(),
-        message: supportForm.message.value.trim()
-      }).then(function () {
-        supportForm.reset();
-        setStatus(statusEl, 'Support request submitted.', false);
-      }).catch(function (err) {
-        setStatus(statusEl, err.message || 'Could not submit request.', true);
+      sdkFactory.clearFieldErrors(supportForm);
+      var subject = supportForm.subject.value.trim();
+      var message = supportForm.message.value.trim();
+      var fieldErrs = {};
+      if (subject.length < 3) fieldErrs.subject = uiMsg().subjectTooShort;
+      if (message.length < 5) fieldErrs.message = uiMsg().messageTooShort;
+      if (Object.keys(fieldErrs).length) {
+        sdkFactory.setFieldErrors(supportForm, fieldErrs);
+        setStatus(sStatus, Object.values(fieldErrs)[0], 'error');
+        return;
+      }
+      setStatus(sStatus, uiMsg().loading, 'loading', { scroll: false });
+      sdkFactory.withFormBusy(supportForm, sBtn, function () {
+        return sdk.createSupportTicket({
+          subject: subject,
+          message: message
+        }).then(function () {
+          supportForm.reset();
+          setStatus(sStatus, 'Support request submitted.', 'success');
+        }).catch(function (err) {
+          if (err && err.details) sdkFactory.setFieldErrors(supportForm, err.details);
+          setStatus(sStatus, sdkFactory.formatPortalApiError(err, 'Could not submit request.'), 'error');
+        });
       });
     });
   }

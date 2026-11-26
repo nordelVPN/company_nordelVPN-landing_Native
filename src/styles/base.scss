@@ -7,6 +7,11 @@
   --popular: #ecf6fa; --popular-border: #83bfdf;
   --mountain-back: #cbe5f1; --mountain-front: #d6ecf5; --snow: #f7fcff;
   --sun: #f7fcff; --hill: #d9eff6; --ground: #f1f9fc;
+  --ps-radius: 12px; --ps-font: Arial, sans-serif;
+  --ps-error-bg: #fef2f2; --ps-error-border: #dc2626; --ps-error-text: #991b1b;
+  --ps-success-bg: #f0fdf4; --ps-success-border: #16a34a; --ps-success-text: #14532d;
+  --ps-warning-bg: #fffbeb; --ps-warning-border: #d97706; --ps-warning-text: #78350f;
+  --ps-info-bg: #ecf6fa; --ps-info-border: #17568e; --ps-info-text: #102f53;
 }
 @mixin dark-tokens {
   color-scheme: dark;
@@ -17,6 +22,10 @@
   --popular: #1c3e52; --popular-border: #a0d0e8;
   --mountain-back: #305b73; --mountain-front: #406d81; --snow: #779fb3;
   --sun: #3c5b6e; --hill: #294e62; --ground: #1a3a4d;
+  --ps-error-bg: rgba(239, 68, 68, 0.16); --ps-error-border: #f87171; --ps-error-text: #fecaca;
+  --ps-success-bg: rgba(34, 197, 94, 0.16); --ps-success-border: #4ade80; --ps-success-text: #bbf7d0;
+  --ps-warning-bg: rgba(245, 158, 11, 0.16); --ps-warning-border: #fbbf24; --ps-warning-text: #fde68a;
+  --ps-info-bg: rgba(131, 190, 223, 0.15); --ps-info-border: #83bedf; --ps-info-text: #e8f3fb;
 }
 :root[data-theme="dark"] { @include dark-tokens; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme]) { @include dark-tokens; } }
@@ -100,3 +109,5 @@ h2 { font-size: 54px; }
   html { scroll-padding-top: 160px; }
 }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+@import './components/portal-status';

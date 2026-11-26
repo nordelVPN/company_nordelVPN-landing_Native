@@ -1214,6 +1214,619 @@ async function mountPaymentProviderSelector(sdk, container) {
   };
 }
 
+
+// ---- Unified Form Status, Validation & 13-Language UI Helpers (TASK-019) ----
+
+const PORTAL_STATUS_PRESETS = {
+  nordel: {
+    '--ps-radius': '12px',
+    '--ps-font': 'Arial, sans-serif',
+    '--ps-error-bg': '#fef2f2',
+    '--ps-error-border': '#dc2626',
+    '--ps-error-text': '#991b1b',
+    '--ps-success-bg': '#f0fdf4',
+    '--ps-success-border': '#16a34a',
+    '--ps-success-text': '#14532d',
+    '--ps-warning-bg': '#fffbeb',
+    '--ps-warning-border': '#d97706',
+    '--ps-warning-text': '#78350f',
+    '--ps-info-bg': '#ecf6fa',
+    '--ps-info-border': '#17568e',
+    '--ps-info-text': '#102f53',
+  },
+  nordelDark: {
+    '--ps-radius': '12px',
+    '--ps-font': 'Arial, sans-serif',
+    '--ps-error-bg': 'rgba(239, 68, 68, 0.16)',
+    '--ps-error-border': '#f87171',
+    '--ps-error-text': '#fecaca',
+    '--ps-success-bg': 'rgba(34, 197, 94, 0.16)',
+    '--ps-success-border': '#4ade80',
+    '--ps-success-text': '#bbf7d0',
+    '--ps-warning-bg': 'rgba(245, 158, 11, 0.16)',
+    '--ps-warning-border': '#fbbf24',
+    '--ps-warning-text': '#fde68a',
+    '--ps-info-bg': 'rgba(131, 190, 223, 0.15)',
+    '--ps-info-border': '#83bedf',
+    '--ps-info-text': '#e8f3fb',
+  },
+  luni: {
+    '--ps-radius': '14px',
+    '--ps-font': 'inherit',
+    '--ps-error-bg': '#fbeae8',
+    '--ps-error-border': '#b42318',
+    '--ps-error-text': '#7a1c14',
+    '--ps-success-bg': '#eaf5ec',
+    '--ps-success-border': '#267339',
+    '--ps-success-text': '#143622',
+    '--ps-warning-bg': '#fcf3de',
+    '--ps-warning-border': '#b56a00',
+    '--ps-warning-text': '#693c00',
+    '--ps-info-bg': '#f1ebda',
+    '--ps-info-border': '#6a7849',
+    '--ps-info-text': '#143622',
+  },
+  kuni: {
+    '--ps-radius': '10px',
+    '--ps-font': 'Montserrat, Arial, sans-serif',
+    '--ps-error-bg': 'rgba(255, 82, 82, 0.14)',
+    '--ps-error-border': '#ff6b6b',
+    '--ps-error-text': '#ffb4b4',
+    '--ps-success-bg': 'rgba(46, 204, 113, 0.14)',
+    '--ps-success-border': '#4cd97b',
+    '--ps-success-text': '#b8f5cd',
+    '--ps-warning-bg': 'rgba(255, 170, 0, 0.14)',
+    '--ps-warning-border': '#ffaa33',
+    '--ps-warning-text': '#ffd999',
+    '--ps-info-bg': 'rgba(255, 122, 0, 0.12)',
+    '--ps-info-border': '#ff7a00',
+    '--ps-info-text': '#f7f2e8',
+  },
+  n1x: {
+    '--ps-radius': '8px',
+    '--ps-font': 'Manrope, sans-serif',
+    '--ps-error-bg': 'rgba(255, 77, 94, 0.15)',
+    '--ps-error-border': '#ff5c6c',
+    '--ps-error-text': '#ffd1d6',
+    '--ps-success-bg': 'rgba(203, 248, 6, 0.12)',
+    '--ps-success-border': '#cbf806',
+    '--ps-success-text': '#e9ff8a',
+    '--ps-warning-bg': 'rgba(255, 184, 0, 0.14)',
+    '--ps-warning-border': '#ffb800',
+    '--ps-warning-text': '#ffe299',
+    '--ps-info-bg': 'rgba(248, 240, 224, 0.08)',
+    '--ps-info-border': '#797872',
+    '--ps-info-text': '#f8f0e0',
+  },
+};
+
+const PORTAL_UI_I18N = {
+  en: {
+    invalidEmail: 'Enter a valid email address.',
+    requiredField: 'This field is required.',
+    passwordTooShort: 'Password must be at least 8 characters.',
+    passwordsMismatch: 'Passwords do not match.',
+    acceptTermsRequired: 'Please accept the Terms of Use and Privacy Policy.',
+    subjectTooShort: 'Subject must be at least 3 characters.',
+    messageTooShort: 'Message must be at least 5 characters.',
+    loading: 'Loading...',
+    serviceUnavailable: 'Service is temporarily unavailable. Please try again.',
+    tooManyRequests: 'Too many attempts. Please wait a moment and try again.',
+    unauthorized: 'Invalid email or password.',
+    keyExpired: 'Your VPN subscription has expired. Renew your plan to restore access.',
+    keyRevoked: 'Your VPN key has been revoked. Contact support for assistance.',
+    deviceLimitReached: 'Device limit reached. Revoke an unused device to connect a new one.',
+    siteWishlistMode: 'Registration is currently in waitlist mode.',
+    validationFailed: 'Please check the highlighted fields.',
+    privacyConsentPrefix: 'By continuing, you agree to our',
+    termsLink: 'Terms of Use',
+    privacyLink: 'Privacy Policy',
+    andWord: 'and',
+  },
+  ru: {
+    invalidEmail: 'Введите корректный email.',
+    requiredField: 'Это поле обязательно для заполнения.',
+    passwordTooShort: 'Пароль должен содержать не менее 8 символов.',
+    passwordsMismatch: 'Пароли не совпадают.',
+    acceptTermsRequired: 'Необходимо принять Условия использования и Политику конфиденциальности.',
+    subjectTooShort: 'Тема должна содержать не менее 3 символов.',
+    messageTooShort: 'Сообщение должно содержать не менее 5 символов.',
+    loading: 'Загрузка...',
+    serviceUnavailable: 'Сервис временно недоступен. Попробуйте позже.',
+    tooManyRequests: 'Слишком много попыток. Подождите немного и попробуйте снова.',
+    unauthorized: 'Неверный email или пароль.',
+    keyExpired: 'Срок действия VPN-подписки истёк. Продлите тариф для восстановления доступа.',
+    keyRevoked: 'Ваш VPN-ключ отозван. Обратитесь в поддержку.',
+    deviceLimitReached: 'Достигнут лимит устройств. Отвяжите неиспользуемое устройство.',
+    siteWishlistMode: 'Регистрация временно работает в режиме листа ожидания.',
+    validationFailed: 'Проверьте выделенные поля.',
+    privacyConsentPrefix: 'Продолжая, вы соглашаетесь с',
+    termsLink: 'Условиями использования',
+    privacyLink: 'Политикой конфиденциальности',
+    andWord: 'и',
+  },
+  pl: {
+    invalidEmail: 'Podaj prawidłowy adres e-mail.',
+    requiredField: 'To pole jest wymagane.',
+    passwordTooShort: 'Hasło musi mieć co najmniej 8 znaków.',
+    passwordsMismatch: 'Hasła nie są identyczne.',
+    acceptTermsRequired: 'Zaakceptuj Warunki korzystania i Politykę prywatności.',
+    subjectTooShort: 'Temat musi mieć co najmniej 3 znaki.',
+    messageTooShort: 'Wiadomość musi mieć co najmniej 5 znaków.',
+    loading: 'Ładowanie...',
+    serviceUnavailable: 'Usługa jest chwilowo niedostępna. Spróbuj ponownie.',
+    tooManyRequests: 'Zbyt wiele prób. Poczekaj chwilę i spróbuj ponownie.',
+    unauthorized: 'Nieprawidłowy e-mail lub hasło.',
+    keyExpired: 'Twoja subskrypcja VPN wygasła. Odnów plan, aby przywrócić dostęp.',
+    keyRevoked: 'Twój klucz VPN został unieważniony. Skontaktuj się z pomocą techniczną.',
+    deviceLimitReached: 'Osiągnięto limit urządzeń. Odłącz nieużywane urządzenie.',
+    siteWishlistMode: 'Rejestracja działa obecnie w trybie listy oczekujących.',
+    validationFailed: 'Sprawdź podświetlone pola.',
+    privacyConsentPrefix: 'Kontynuując, akceptujesz nasze',
+    termsLink: 'Warunki korzystania',
+    privacyLink: 'Politykę prywatności',
+    andWord: 'oraz',
+  },
+  uk: {
+    invalidEmail: 'Введіть коректний email.',
+    requiredField: 'Це поле є обов’язковим.',
+    passwordTooShort: 'Пароль має містити щонайменше 8 символів.',
+    passwordsMismatch: 'Паролі не збігаються.',
+    acceptTermsRequired: 'Прийміть Умови використання та Політику конфіденційності.',
+    subjectTooShort: 'Тема має містити щонайменше 3 символи.',
+    messageTooShort: 'Повідомлення має містити щонайменше 5 символів.',
+    loading: 'Завантаження...',
+    serviceUnavailable: 'Сервіс тимчасово недоступний. Спробуйте пізніше.',
+    tooManyRequests: 'Забагато спроб. Зачекайте трохи та спробуйте знову.',
+    unauthorized: 'Невірний email або пароль.',
+    keyExpired: 'Термін дії VPN-підписки минув. Продовжіть тариф для відновлення доступу.',
+    keyRevoked: 'Ваш VPN-ключ відкликано. Зверніться до підтримки.',
+    deviceLimitReached: 'Досягнуто ліміт пристроїв. Відв’яжіть невикористаний пристрій.',
+    siteWishlistMode: 'Реєстрація зараз працює в режимі листа очікування.',
+    validationFailed: 'Перевірте виділені поля.',
+    privacyConsentPrefix: 'Продовжуючи, ви погоджуєтеся з',
+    termsLink: 'Умовами використання',
+    privacyLink: 'Політикою конфіденційності',
+    andWord: 'та',
+  },
+  lt: {
+    invalidEmail: 'Įveskite galiojantį el. pašto adresą.',
+    requiredField: 'Šis laukas yra privalomas.',
+    passwordTooShort: 'Slaptažodį turi sudaryti bent 8 simboliai.',
+    passwordsMismatch: 'Slaptažodžiai nesutampa.',
+    acceptTermsRequired: 'Priimkite Naudojimo sąlygas ir Privatumo politiką.',
+    subjectTooShort: 'Tema turi būti bent 3 simbolių.',
+    messageTooShort: 'Žinutė turi būti bent 5 simbolių.',
+    loading: 'Įkeliama...',
+    serviceUnavailable: 'Paslauga laikinai nepasiekiama. Bandykite vėliau.',
+    tooManyRequests: 'Per daug bandymų. Palaukite ir bandykite dar kartą.',
+    unauthorized: 'Neteisingas el. paštas arba slaptažodis.',
+    keyExpired: 'Jūsų VPN prenumerata baigėsi. Atnaujinkite planą.',
+    keyRevoked: 'Jūsų VPN raktas atšauktas. Susisiekite su palaikymu.',
+    deviceLimitReached: 'Pasiektas įrenginių limitas. Pašalinkite nenaudojamą įrenginį.',
+    siteWishlistMode: 'Registracija šiuo metu veikia laukiančiųjų sąrašo režimu.',
+    validationFailed: 'Patikrinkite pažymėtus laukus.',
+    privacyConsentPrefix: 'Tęsdami sutinkate su mūsų',
+    termsLink: 'Naudojimo sąlygomis',
+    privacyLink: 'Privatumo politika',
+    andWord: 'ir',
+  },
+  tr: {
+    invalidEmail: 'Geçerli bir e-posta adresi girin.',
+    requiredField: 'Bu alan zorunludur.',
+    passwordTooShort: 'Şifre en az 8 karakter olmalıdır.',
+    passwordsMismatch: 'Şifreler eşleşmiyor.',
+    acceptTermsRequired: 'Kullanım Koşullarını ve Gizlilik Politikasını kabul edin.',
+    subjectTooShort: 'Konu en az 3 karakter olmalıdır.',
+    messageTooShort: 'Mesaj en az 5 karakter olmalıdır.',
+    loading: 'Yükleniyor...',
+    serviceUnavailable: 'Hizmet geçici olarak kullanılamıyor. Lütfen tekrar deneyin.',
+    tooManyRequests: 'Çok fazla deneme. Lütfen biraz bekleyip tekrar deneyin.',
+    unauthorized: 'Geçersiz e-posta veya şifre.',
+    keyExpired: 'VPN aboneliğinizin süresi doldu. Erişimi geri yüklemek için planınızı yenileyin.',
+    keyRevoked: 'VPN anahtarınız iptal edildi. Destek ile iletişime geçin.',
+    deviceLimitReached: 'Cihaz sınırına ulaşıldı. Kullanılmayan bir cihazı kaldırın.',
+    siteWishlistMode: 'Kayıt şu anda bekleme listesi modundadır.',
+    validationFailed: 'Lütfen vurgulanan alanları kontrol edin.',
+    privacyConsentPrefix: 'Devam ederek şunları kabul etmiş olursunuz:',
+    termsLink: 'Kullanım Koşulları',
+    privacyLink: 'Gizlilik Politikası',
+    andWord: 've',
+  },
+  ro: {
+    invalidEmail: 'Introduceți o adresă de email validă.',
+    requiredField: 'Acest câmp este obligatoriu.',
+    passwordTooShort: 'Parola trebuie să aibă cel puțin 8 caractere.',
+    passwordsMismatch: 'Parolele nu corespund.',
+    acceptTermsRequired: 'Acceptați Termenii de utilizare și Politica de confidențialitate.',
+    subjectTooShort: 'Subiectul trebuie să aibă cel puțin 3 caractere.',
+    messageTooShort: 'Mesajul trebuie să aibă cel puțin 5 caractere.',
+    loading: 'Se încarcă...',
+    serviceUnavailable: 'Serviciul este temporar indisponibil. Încercați din nou.',
+    tooManyRequests: 'Prea multe încercări. Așteptați un moment și încercați din nou.',
+    unauthorized: 'Email sau parolă incorectă.',
+    keyExpired: 'Abonamentul VPN a expirat. Reînnoiți planul pentru a restabili accesul.',
+    keyRevoked: 'Cheia VPN a fost revocată. Contactați suportul.',
+    deviceLimitReached: 'Limita de dispozitive a fost atinsă. Eliminați un dispozitiv neutilizat.',
+    siteWishlistMode: 'Înregistrarea este momentan în modul listă de așteptare.',
+    validationFailed: 'Verificați câmpurile evidențiate.',
+    privacyConsentPrefix: 'Continuând, sunteți de acord cu',
+    termsLink: 'Termenii de utilizare',
+    privacyLink: 'Politica de confidențialitate',
+    andWord: 'și',
+  },
+  de: {
+    invalidEmail: 'Geben Sie eine gültige E-Mail-Adresse ein.',
+    requiredField: 'Dieses Feld ist erforderlich.',
+    passwordTooShort: 'Das Passwort muss mindestens 8 Zeichen lang sein.',
+    passwordsMismatch: 'Die Passwörter stimmen nicht überein.',
+    acceptTermsRequired: 'Bitte akzeptieren Sie die Nutzungsbedingungen und Datenschutzrichtlinie.',
+    subjectTooShort: 'Der Betreff muss mindestens 3 Zeichen lang sein.',
+    messageTooShort: 'Die Nachricht muss mindestens 5 Zeichen lang sein.',
+    loading: 'Wird geladen...',
+    serviceUnavailable: 'Der Dienst ist vorübergehend nicht verfügbar. Bitte versuchen Sie es erneut.',
+    tooManyRequests: 'Zu viele Versuche. Bitte warten Sie einen Moment.',
+    unauthorized: 'Ungültige E-Mail-Adresse oder falsches Passwort.',
+    keyExpired: 'Ihr VPN-Abonnement ist abgelaufen. Verlängern Sie Ihren Tarif.',
+    keyRevoked: 'Ihr VPN-Schlüssel wurde widerrufen. Kontaktieren Sie den Support.',
+    deviceLimitReached: 'Gerätelimit erreicht. Entfernen Sie ein nicht genutztes Gerät.',
+    siteWishlistMode: 'Die Registrierung befindet sich derzeit im Wartelisten-Modus.',
+    validationFailed: 'Bitte überprüfen Sie die markierten Felder.',
+    privacyConsentPrefix: 'Indem Sie fortfahren, stimmen Sie unseren',
+    termsLink: 'Nutzungsbedingungen',
+    privacyLink: 'Datenschutzrichtlinie',
+    andWord: 'und',
+  },
+  sk: {
+    invalidEmail: 'Zadajte platnú e-mailovú adresu.',
+    requiredField: 'Toto pole je povinné.',
+    passwordTooShort: 'Heslo musí mať aspoň 8 znakov.',
+    passwordsMismatch: 'Heslá sa nezhodujú.',
+    acceptTermsRequired: 'Prijmite Podmienky používania a Zásady ochrany osobných údajov.',
+    subjectTooShort: 'Predmet musí mať aspoň 3 znaky.',
+    messageTooShort: 'Správa musí mať aspoň 5 znakov.',
+    loading: 'Načítava sa...',
+    serviceUnavailable: 'Služba je dočasne nedostupná. Skúste to znova.',
+    tooManyRequests: 'Príliš veľa pokusov. Chvíľu počkajte a skúste to znova.',
+    unauthorized: 'Neplatný e-mail alebo heslo.',
+    keyExpired: 'Vaše predplatné VPN vypršalo. Obnovte si plán.',
+    keyRevoked: 'Váš kľúč VPN bol zrušený. Kontaktujte podporu.',
+    deviceLimitReached: 'Dosiahol sa limit zariadení. Odpojte nepoužívané zariadenie.',
+    siteWishlistMode: 'Registrácia je momentálne v režime čakacej listiny.',
+    validationFailed: 'Skontrolujte zvýraznené polia.',
+    privacyConsentPrefix: 'Pokračovaním súhlasíte s',
+    termsLink: 'Podmienkami používania',
+    privacyLink: 'Zásadami ochrany osobných údajov',
+    andWord: 'a',
+  },
+  hr: {
+    invalidEmail: 'Unesite valjanu adresu e-pošte.',
+    requiredField: 'Ovo polje je obavezno.',
+    passwordTooShort: 'Lozinka mora imati najmanje 8 znakova.',
+    passwordsMismatch: 'Lozinke se ne podudaraju.',
+    acceptTermsRequired: 'Prihvatite Uvjete korištenja i Pravila privatnosti.',
+    subjectTooShort: 'Predmet mora imati najmanje 3 znaka.',
+    messageTooShort: 'Poruka mora imati najmanje 5 znakova.',
+    loading: 'Učitavanje...',
+    serviceUnavailable: 'Usluga je privremeno nedostupna. Pokušajte ponovno.',
+    tooManyRequests: 'Previše pokušaja. Pričekajte trenutak i pokušajte ponovno.',
+    unauthorized: 'Neispravna e-pošta ili lozinka.',
+    keyExpired: 'Vaša VPN pretplata je istekla. Obnovite plan za nastavak.',
+    keyRevoked: 'Vaš VPN ključ je opozvan. Kontaktirajte podršku.',
+    deviceLimitReached: 'Dosegnut je limit uređaja. Uklonite nekorišteni uređaj.',
+    siteWishlistMode: 'Registracija je trenutno u načinu liste čekanja.',
+    validationFailed: 'Provjerite označena polja.',
+    privacyConsentPrefix: 'Nastavkom prihvaćate naše',
+    termsLink: 'Uvjete korištenja',
+    privacyLink: 'Pravila privatnosti',
+    andWord: 'i',
+  },
+  sr: {
+    invalidEmail: 'Unesite ispravnu email adresu.',
+    requiredField: 'Ovo polje je obavezno.',
+    passwordTooShort: 'Lozinka mora imati najmanje 8 karaktera.',
+    passwordsMismatch: 'Lozinke se ne podudaraju.',
+    acceptTermsRequired: 'Prihvatite Uslove korišćenja i Politiku privatnosti.',
+    subjectTooShort: 'Naslov mora imati najmanje 3 karaktera.',
+    messageTooShort: 'Poruka mora imati najmanje 5 karaktera.',
+    loading: 'Učitavanje...',
+    serviceUnavailable: 'Usluga je privremeno nedostupna. Pokušajte ponovo.',
+    tooManyRequests: 'Previše pokušaja. Sačekajte trenutak i pokušajte ponovo.',
+    unauthorized: 'Neispravan email ili lozinka.',
+    keyExpired: 'Vaša VPN pretplata je istekla. Obnovite plan za nastavak.',
+    keyRevoked: 'Vaš VPN ključ je opozvan. Kontaktirajte podršku.',
+    deviceLimitReached: 'Dostignut je limit uređaja. Uklonite nekorišćeni uređaj.',
+    siteWishlistMode: 'Registracija je trenutno u režimu liste čekanja.',
+    validationFailed: 'Proverite označena polja.',
+    privacyConsentPrefix: 'Nastavkom prihvatate naše',
+    termsLink: 'Uslove korišćenja',
+    privacyLink: 'Politiku privatnosti',
+    andWord: 'i',
+  },
+  bg: {
+    invalidEmail: 'Въведете валиден имейл адрес.',
+    requiredField: 'Това поле е задължително.',
+    passwordTooShort: 'Паролата трябва да е поне 8 символа.',
+    passwordsMismatch: 'Паролите не съвпадат.',
+    acceptTermsRequired: 'Приемете Условията за ползване и Политиката за поверителност.',
+    subjectTooShort: 'Темата трябва да е поне 3 символа.',
+    messageTooShort: 'Съобщението трябва да е поне 5 символа.',
+    loading: 'Зареждане...',
+    serviceUnavailable: 'Услугата е временно недостъпна. Опитайте отново.',
+    tooManyRequests: 'Твърде много опити. Изчакайте малко и опитайте отново.',
+    unauthorized: 'Невалиден имейл или парола.',
+    keyExpired: 'Вашият VPN абонамент изтече. Подновете плана си.',
+    keyRevoked: 'Вашият VPN ключ е отнет. Свържете се с поддръжката.',
+    deviceLimitReached: 'Достигнат е лимитът на устройства. Премахнете неизползвано устройство.',
+    siteWishlistMode: 'Регистрацията в момента е в режим на списък с чакащи.',
+    validationFailed: 'Проверете маркираните полета.',
+    privacyConsentPrefix: 'Продължавайки, вие се съгласявате с нашите',
+    termsLink: 'Условия за ползване',
+    privacyLink: 'Политика за поверителност',
+    andWord: 'и',
+  },
+  hu: {
+    invalidEmail: 'Adjon meg egy érvényes e-mail-címet.',
+    requiredField: 'Ez a mező kötelező.',
+    passwordTooShort: 'A jelszónak legalább 8 karakter hosszúnak kell lennie.',
+    passwordsMismatch: 'A jelszavak nem egyeznek.',
+    acceptTermsRequired: 'Fogadja el a Felhasználási feltételeket és az Adatvédelmi irányelveket.',
+    subjectTooShort: 'A tárgynak legalább 3 karakterből kell állnia.',
+    messageTooShort: 'Az üzenetnek legalább 5 karakterből kell állnia.',
+    loading: 'Betöltés...',
+    serviceUnavailable: 'A szolgáltatás átmenetileg nem érhető el. Próbálja újra.',
+    tooManyRequests: 'Túl sok próbálkozás. Várjon egy pillanatot, és próbálja újra.',
+    unauthorized: 'Érvénytelen e-mail-cím vagy jelszó.',
+    keyExpired: 'A VPN-előfizetése lejárt. Újítsa meg a csomagját.',
+    keyRevoked: 'A VPN-kulcsát visszavonták. Lépjen kapcsolatba az ügyfélszolgálattal.',
+    deviceLimitReached: 'Elérte az eszközlimitet. Távolítson el egy nem használt eszközt.',
+    siteWishlistMode: 'A regisztráció jelenleg várólista módban működik.',
+    validationFailed: 'Ellenőrizze a megjelölt mezőket.',
+    privacyConsentPrefix: 'A folytatással elfogadja a',
+    termsLink: 'Felhasználási feltételeket',
+    privacyLink: 'Adatvédelmi irányelveket',
+    andWord: 'és az',
+  },
+};
+
+function getPortalUiMessages(lang) {
+  const code = String(
+    lang
+    || (typeof document !== 'undefined' && document.documentElement && document.documentElement.lang)
+    || 'en'
+  ).slice(0, 2).toLowerCase();
+  return PORTAL_UI_I18N[code] || PORTAL_UI_I18N.en;
+}
+
+const VALID_PORTAL_STATUS_TYPES = new Set(['error', 'success', 'warning', 'info', 'loading']);
+
+function setPortalStatus(el, message, type = 'info', options = {}) {
+  if (!el) return el;
+  const normalizedType = VALID_PORTAL_STATUS_TYPES.has(type) ? type : 'info';
+  if (el.classList && typeof el.classList.remove === 'function') {
+    el.classList.remove('muted', 'demo-note', 'prototype-note');
+  }
+  el.setAttribute('data-portal-status', '');
+  el.setAttribute('data-status-type', normalizedType);
+  el.setAttribute('data-state', normalizedType);
+  if (normalizedType === 'error') {
+    el.setAttribute('role', 'alert');
+    el.setAttribute('aria-live', 'assertive');
+  } else {
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+  }
+  el.hidden = false;
+  el.textContent = (message === null || message === undefined) ? '' : String(message);
+
+  if (
+    normalizedType === 'error'
+    && options.scroll !== false
+    && typeof window !== 'undefined'
+    && typeof el.getBoundingClientRect === 'function'
+    && typeof el.scrollIntoView === 'function'
+  ) {
+    try {
+      const rect = el.getBoundingClientRect();
+      const viewH = window.innerHeight || (document.documentElement && document.documentElement.clientHeight) || 0;
+      if (viewH > 0 && (rect.top < 0 || rect.bottom > viewH)) {
+        const reduced = typeof window.matchMedia === 'function'
+          && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        el.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'nearest' });
+      }
+    } catch {
+      // ignore in non-layout environments
+    }
+  }
+  return el;
+}
+
+function clearPortalStatus(el) {
+  if (!el) return el;
+  el.textContent = '';
+  el.removeAttribute('data-status-type');
+  el.removeAttribute('data-state');
+  el.setAttribute('role', 'status');
+  el.setAttribute('aria-live', 'polite');
+  el.hidden = true;
+  return el;
+}
+
+function resolveFormField(form, fieldName) {
+  if (!form || !fieldName) return null;
+  const fromElements = form.elements && form.elements[fieldName];
+  if (fromElements) {
+    if (typeof fromElements.nodeType === 'number') return fromElements;
+    if (fromElements.length && typeof fromElements[0]?.nodeType === 'number') return fromElements[0];
+  }
+  if (typeof form.querySelector === 'function') {
+    return form.querySelector('[name=' + JSON.stringify(String(fieldName)) + ']');
+  }
+  return null;
+}
+
+function clearFieldErrors(form) {
+  if (!form || typeof form.querySelectorAll !== 'function') return;
+  form.querySelectorAll('[aria-invalid="true"]').forEach((field) => {
+    field.removeAttribute('aria-invalid');
+    const describedBy = field.getAttribute('aria-describedby') || '';
+    if (describedBy.includes('portal-field-error-')) {
+      const next = describedBy
+        .split(/\s+/)
+        .filter((id) => id && !id.startsWith('portal-field-error-'))
+        .join(' ');
+      if (next) field.setAttribute('aria-describedby', next);
+      else field.removeAttribute('aria-describedby');
+    }
+  });
+  form.querySelectorAll('.portal-field-error, [data-field-error]').forEach((errEl) => {
+    errEl.textContent = '';
+  });
+}
+
+function setFieldErrors(form, fieldErrors, options = {}) {
+  if (!form) return [];
+  if (!options.keepExisting) {
+    clearFieldErrors(form);
+  }
+  if (!fieldErrors || typeof fieldErrors !== 'object') return [];
+
+  const invalidFields = [];
+  const doc = form.ownerDocument || (typeof document !== 'undefined' ? document : null);
+
+  for (const [fieldName, rawMsg] of Object.entries(fieldErrors)) {
+    const msg = Array.isArray(rawMsg) ? rawMsg.find(Boolean) : rawMsg;
+    if (!msg) continue;
+    const field = resolveFormField(form, fieldName);
+    if (!field) continue;
+
+    field.setAttribute('aria-invalid', 'true');
+    invalidFields.push(field);
+
+    let errEl = typeof form.querySelector === 'function'
+      ? form.querySelector('[data-field-error=' + JSON.stringify(String(fieldName)) + ']')
+      : null;
+    if (!errEl && doc) {
+      errEl = doc.createElement('p');
+      errEl.className = 'portal-field-error';
+      errEl.setAttribute('data-field-error', fieldName);
+      errEl.setAttribute('aria-live', 'polite');
+
+      const checkboxWrap = typeof field.closest === 'function'
+        ? (field.type === 'checkbox' ? field.closest('label, .checkbox-label, .field') : field.closest('.field'))
+        : null;
+      const anchor = checkboxWrap || field;
+      if (anchor.parentNode) {
+        anchor.parentNode.insertBefore(errEl, anchor.nextSibling);
+      } else {
+        form.appendChild(errEl);
+      }
+    }
+
+    if (errEl) {
+      if (!errEl.id) {
+        errEl.id = 'portal-field-error-' + String(fieldName).replace(/[^a-zA-Z0-9_-]/g, '-');
+      }
+      errEl.textContent = String(msg);
+      const existingDesc = field.getAttribute('aria-describedby') || '';
+      const ids = existingDesc.split(/\s+/).filter(Boolean);
+      if (!ids.includes(errEl.id)) {
+        ids.push(errEl.id);
+        field.setAttribute('aria-describedby', ids.join(' '));
+      }
+    }
+  }
+
+  if (options.focus !== false && invalidFields[0] && typeof invalidFields[0].focus === 'function') {
+    try {
+      invalidFields[0].focus({ preventScroll: true });
+    } catch {
+      invalidFields[0].focus();
+    }
+  }
+
+  return invalidFields;
+}
+
+function bindFormValidationClear(form) {
+  if (!form || form.__portalValidationClearBound) return;
+  form.__portalValidationClearBound = true;
+  const handler = (event) => {
+    const target = event && event.target;
+    if (!target || !target.getAttribute) return;
+    if (target.getAttribute('aria-invalid') === 'true') {
+      target.removeAttribute('aria-invalid');
+    }
+    const name = target.getAttribute('name');
+    if (name && typeof form.querySelector === 'function') {
+      const errEl = form.querySelector('[data-field-error=' + JSON.stringify(String(name)) + ']');
+      if (errEl) errEl.textContent = '';
+    }
+  };
+  form.addEventListener('input', handler);
+  form.addEventListener('change', handler);
+}
+
+async function withFormBusy(form, submitBtn, asyncFn, options = {}) {
+  if ((form && form.getAttribute('aria-busy') === 'true') || (submitBtn && submitBtn.disabled)) {
+    return null;
+  }
+  const prevDisabled = submitBtn ? Boolean(submitBtn.disabled) : false;
+  const prevLabel = submitBtn ? submitBtn.textContent : '';
+  if (form) form.setAttribute('aria-busy', 'true');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.dataset.loading = 'true';
+    if (prevLabel) submitBtn.dataset.originalLabel = prevLabel;
+    if (options.loadingText) submitBtn.textContent = options.loadingText;
+  }
+  try {
+    return await asyncFn();
+  } finally {
+    if (form) form.removeAttribute('aria-busy');
+    if (submitBtn) {
+      submitBtn.disabled = prevDisabled;
+      delete submitBtn.dataset.loading;
+      if (options.loadingText) {
+        submitBtn.textContent = prevLabel;
+      }
+    }
+  }
+}
+
+function formatPortalApiError(err, fallbackMessage = '', lang) {
+  const ui = getPortalUiMessages(lang);
+  if (!err) return fallbackMessage || ui.serviceUnavailable;
+
+  if (err.status === 422 && err.details && typeof err.details === 'object') {
+    for (const val of Object.values(err.details)) {
+      const first = Array.isArray(val) ? val.find(Boolean) : val;
+      if (first && typeof first === 'string' && !/^\s*[{[]/.test(first)) {
+        return first;
+      }
+    }
+    return err.message || ui.validationFailed;
+  }
+
+  if (err.status === 0 || err.status >= 500 || err.code === 'NETWORK_ERROR') {
+    return ui.serviceUnavailable;
+  }
+  if (err.status === 429) {
+    return (err.message && !/^\s*[{[]/.test(err.message)) ? err.message : ui.tooManyRequests;
+  }
+  if (err.code === 'KEY_EXPIRED') return err.message || ui.keyExpired;
+  if (err.code === 'KEY_REVOKED') return err.message || ui.keyRevoked;
+  if (err.code === 'DEVICE_LIMIT_REACHED') return err.message || ui.deviceLimitReached;
+  if (err.code === 'SITE_IN_WISHLIST_MODE') return err.message || ui.siteWishlistMode;
+  if (err.status === 401) return err.message || ui.unauthorized;
+
+  const rawMsg = typeof err.message === 'string' ? err.message.trim() : '';
+  if (rawMsg && !/^\s*[{[]/.test(rawMsg) && !/Failed to fetch|NetworkError/i.test(rawMsg)) {
+    return rawMsg;
+  }
+  return fallbackMessage || ui.serviceUnavailable;
+}
+
 function handleCheckoutResponse(sdk, res, options = {}) {
   const mode = res?.checkout?.mode;
   const targetUrl = res?.checkout?.checkout_url;
@@ -1265,14 +1878,14 @@ function handleCheckoutResponse(sdk, res, options = {}) {
 
     confirmBtn.addEventListener('click', async () => {
       confirmBtn.disabled = true;
-      statusLine.textContent = 'Completing test payment...';
+      setPortalStatus(statusLine, 'Completing test payment...', 'loading', { scroll: false });
       try {
         await sdk.mockCompletePayment(paymentUuid, 'paid');
-        statusLine.textContent = 'Payment confirmed! Opening your account...';
+        setPortalStatus(statusLine, 'Payment confirmed! Opening your account...', 'success', { scroll: false });
         window.location.href = accountReturnUrl;
       } catch (err) {
         confirmBtn.disabled = false;
-        statusLine.textContent = err?.message || 'Could not complete test payment.';
+        setPortalStatus(statusLine, formatPortalApiError(err, 'Could not complete test payment.'), 'error', { scroll: false });
       }
     });
 
@@ -1310,23 +1923,27 @@ function initCheckoutReturnPolling(sdk, options = {}) {
   if (!status && !paymentUuid) return false;
 
   const statusEl = options.statusEl || document.querySelector('[data-payment-return-status]');
-  const showBanner = (text, isError = false) => {
+  const showBanner = (text, type = 'info') => {
+    const resolvedType = typeof type === 'boolean' ? (type ? 'error' : 'info') : type;
     if (statusEl) {
-      statusEl.textContent = text;
-      statusEl.hidden = false;
-      statusEl.dataset.state = isError ? 'error' : 'info';
+      setPortalStatus(statusEl, text, resolvedType);
       return;
     }
     let banner = document.getElementById('vpn-payment-return-banner');
     if (!banner) {
       banner = document.createElement('div');
       banner.id = 'vpn-payment-return-banner';
-      banner.setAttribute('role', 'status');
-      banner.setAttribute('aria-live', 'polite');
-      banner.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;max-width:420px;padding:14px 18px;border-radius:10px;background:#111827;color:#f9fafb;border:1px solid rgba(255,255,255,0.2);box-shadow:0 10px 30px rgba(0,0,0,0.35);font-size:14px;';
+      banner.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;max-width:420px;box-shadow:0 10px 30px rgba(0,0,0,0.35);';
+      const brandKey = String((sdk && sdk.brandSlug) || 'nordel').toLowerCase();
+      const preset = PORTAL_STATUS_PRESETS[brandKey] || PORTAL_STATUS_PRESETS.nordel;
+      Object.entries(preset).forEach(([k, v]) => {
+        if (k.startsWith('--ps-') && typeof v === 'string') {
+          banner.style.setProperty(k, v);
+        }
+      });
       document.body.appendChild(banner);
     }
-    banner.textContent = text;
+    setPortalStatus(banner, text, resolvedType, { scroll: false });
   };
 
   const clearQueryParams = () => {
@@ -1341,13 +1958,13 @@ function initCheckoutReturnPolling(sdk, options = {}) {
   };
 
   if (status === 'cancelled') {
-    showBanner(options.cancelledText || 'Payment was cancelled. You can try again or choose another payment method.');
+    showBanner(options.cancelledText || 'Payment was cancelled. You can try again or choose another payment method.', 'warning');
     clearQueryParams();
     return true;
   }
 
   if (status === 'success' && paymentUuid) {
-    showBanner(options.confirmingText || 'Confirming your payment...');
+    showBanner(options.confirmingText || 'Confirming your payment...', 'loading');
     const startedAt = Date.now();
     const maxMs = options.timeoutMs || 30000;
     const intervalMs = options.intervalMs || 1500;
@@ -1362,7 +1979,7 @@ function initCheckoutReturnPolling(sdk, options = {}) {
         const res = await sdk.getPaymentStatus(paymentUuid);
         const st = res?.payment?.status;
         if (st === 'paid') {
-          showBanner(options.paidText || 'Payment confirmed! Updating your VPN access...');
+          showBanner(options.paidText || 'Payment confirmed! Updating your VPN access...', 'success');
           clearQueryParams();
           if (typeof options.onPaid === 'function') {
             options.onPaid(res);
@@ -1372,7 +1989,7 @@ function initCheckoutReturnPolling(sdk, options = {}) {
           return;
         }
         if (st === 'failed' || st === 'expired') {
-          showBanner(options.failedText || 'Payment failed or expired. Please try again.', true);
+          showBanner(options.failedText || 'Payment failed or expired. Please try again.', 'error');
           clearQueryParams();
           return;
         }
@@ -1383,7 +2000,7 @@ function initCheckoutReturnPolling(sdk, options = {}) {
       if (Date.now() - startedAt < maxMs) {
         window.setTimeout(poll, intervalMs);
       } else {
-        showBanner(options.timeoutText || 'Payment is being processed. Please check your account in a minute.');
+        showBanner(options.timeoutText || 'Payment is being processed. Please check your account in a minute.', 'warning');
       }
     };
 
@@ -1866,17 +2483,41 @@ function renderWishlistCard(sdk, container, options = {}) {
 
     form.appendChild(actions);
 
+    const portalUi = getPortalUiMessages();
+    const consentEl = document.createElement('p');
+    consentEl.className = 'portal-consent-note';
+    consentEl.style.cssText = 'margin:2px 0 0;font-size:0.8rem;opacity:0.82;line-height:1.45;';
+    consentEl.appendChild(document.createTextNode(portalUi.privacyConsentPrefix + ' '));
+    const termsA = document.createElement('a');
+    termsA.href = './terms.html';
+    termsA.textContent = portalUi.termsLink;
+    termsA.style.cssText = 'color:inherit;text-decoration:underline;';
+    const privacyA = document.createElement('a');
+    privacyA.href = './privacy.html';
+    privacyA.textContent = portalUi.privacyLink;
+    privacyA.style.cssText = 'color:inherit;text-decoration:underline;';
+    consentEl.appendChild(termsA);
+    consentEl.appendChild(document.createTextNode(' ' + portalUi.andWord + ' '));
+    consentEl.appendChild(privacyA);
+    consentEl.appendChild(document.createTextNode('.'));
+    form.appendChild(consentEl);
+
     const statusEl = document.createElement('p');
     statusEl.setAttribute('data-sdk-wishlist-status', '');
+    statusEl.setAttribute('data-portal-status', '');
     statusEl.setAttribute('role', 'status');
     statusEl.setAttribute('aria-live', 'polite');
-    statusEl.style.cssText = 'margin:4px 0 0;font-size:0.9rem;line-height:1.45;';
     statusEl.hidden = !state.statusMsg;
-    statusEl.textContent = state.statusMsg;
+    if (state.statusMsg) {
+      setPortalStatus(statusEl, state.statusMsg, state.statusType || (state.statusIsError ? 'error' : 'info'), { scroll: false });
+    }
     form.appendChild(statusEl);
+
+    bindFormValidationClear(form);
 
     form.addEventListener('submit', (e) => {
       e.preventDefault();
+      clearFieldErrors(form);
       const email = emailInput.value.trim();
       const fullName = nameInput.value.trim();
       const planEl = form.querySelector('[name="plan_code"]');
@@ -1885,32 +2526,40 @@ function renderWishlistCard(sdk, container, options = {}) {
       state.fullName = fullName;
       state.planCode = planCode;
 
-      submitBtn.disabled = true;
-      submitBtn.textContent = ui.submitting;
-      statusEl.hidden = true;
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        const msg = getPortalUiMessages().invalidEmail;
+        state.statusMsg = msg;
+        state.statusIsError = true;
+        state.statusType = 'error';
+        setFieldErrors(form, { email: msg });
+        setPortalStatus(statusEl, msg, 'error');
+        return;
+      }
 
-      sdk.joinWishlist({
+      setPortalStatus(statusEl, ui.submitting, 'loading', { scroll: false });
+
+      withFormBusy(form, submitBtn, () => sdk.joinWishlist({
         email,
         fullName,
         planCode,
         meta: { source_page: state.sourcePage },
       }).then((res) => {
         const msg = (res && res.already_registered) ? ui.successExisting : ui.successNew;
+        const nextType = (res && res.already_registered) ? 'info' : 'success';
         state.statusMsg = msg;
         state.statusIsError = false;
-        statusEl.textContent = msg;
-        statusEl.hidden = false;
-        submitBtn.disabled = false;
-        submitBtn.textContent = ui.submitBtn;
+        state.statusType = nextType;
+        setPortalStatus(statusEl, msg, nextType);
       }).catch((err) => {
-        const msg = (err && err.message) || ui.errorGeneric;
+        const msg = formatPortalApiError(err, ui.errorGeneric);
         state.statusMsg = msg;
         state.statusIsError = true;
-        statusEl.textContent = msg;
-        statusEl.hidden = false;
-        submitBtn.disabled = false;
-        submitBtn.textContent = ui.submitBtn;
-      });
+        state.statusType = 'error';
+        if (err && err.details) {
+          setFieldErrors(form, err.details);
+        }
+        setPortalStatus(statusEl, msg, 'error');
+      }), { loadingText: ui.submitting });
     });
 
     card.appendChild(form);
@@ -1997,6 +2646,8 @@ function mountRegisterWishlistBanner(anchorForm, siteConfig) {
   if (!banner) {
     banner = document.createElement('div');
     banner.setAttribute('data-wishlist-register-banner', '');
+    banner.setAttribute('data-portal-status', '');
+    banner.setAttribute('data-status-type', 'info');
     banner.setAttribute('role', 'status');
     banner.style.cssText = 'display:grid;gap:8px;padding:14px 16px;margin-bottom:16px;border:1px solid currentColor;border-radius:12px;';
     if (anchorForm.parentNode) {
@@ -2105,6 +2756,15 @@ module.exports = {
   formatServerProtocolsAndTags,
   renderLiveServersStrip,
   mountPaymentProviderSelector,
+  PORTAL_STATUS_PRESETS,
+  getPortalUiMessages,
+  setPortalStatus,
+  clearPortalStatus,
+  clearFieldErrors,
+  setFieldErrors,
+  bindFormValidationClear,
+  withFormBusy,
+  formatPortalApiError,
   handleCheckoutResponse,
   initCheckoutReturnPolling,
   syncAccountNavLinks,

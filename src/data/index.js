@@ -11,7 +11,7 @@ module.exports = {
   app: { eyebrow: 'Meet the Nordel app', title: 'A quieter way', titleEnd: 'to connect.', description: 'A thoughtful, uncomplicated experience. Open the app, choose your location and connect in a tap.',
     steps: ['Open Nordel on your device', 'Choose your preferred location', 'Connect and get on with your day'],
     hint: 'INTERACTIVE PREVIEW　 ·　 Tap the button to try it', caption: 'CONCEPT PREVIEW / 01',
-    status: 'Not connected', connectedStatus: 'Connected (preview)', heading: 'Ready when you are', connectedHeading: 'You’re connected', note: 'Your connection is currently off.', connectedNote: 'Demo only — your network connection has not changed.', connect: 'Connect', disconnect: 'Disconnect', locationLabel: 'Selected location', location: 'Fastest location',
+    status: 'Not connected', connectedStatus: 'Connected', heading: 'Ready when you are', connectedHeading: 'You’re connected', note: 'Your connection is currently off.', connectedNote: 'Interactive app view — install NordelVPN to protect your connection.', connect: 'Connect', disconnect: 'Disconnect', locationLabel: 'Selected location', location: 'Fastest location',
     tabs: ['Home', 'Locations', 'Account'], demoNotice: 'This is a concept preview. Locations and accounts are not available yet.' },
   pricing: {
     eyebrow: 'Your freedom starts here',

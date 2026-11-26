@@ -4,8 +4,8 @@
       <p class="eyebrow">Nordel Account</p>
       <h1>Sign In</h1>
       <p class="lead">Access your VPN key, servers, and connected devices.</p>
-      <form class="portal-form" data-portal-login>
-        <div class="portal-status" data-portal-status hidden role="status"></div>
+      <form class="portal-form" data-portal-login novalidate>
+        <div class="portal-status" data-portal-status hidden role="status" aria-live="polite"></div>
         <label class="portal-field">
           <span>Email</span>
           <input type="email" name="email" required autocomplete="email" placeholder="you@example.com">
@@ -15,6 +15,7 @@
           <input type="password" name="password" required autocomplete="current-password" placeholder="••••••••">
         </label>
         <button class="button" type="submit">Sign In ↗</button>
+        <p class="portal-consent-note">By continuing, you agree to our <a href="./terms.html">Terms of Use</a> and <a href="./privacy.html">Privacy Policy</a>.</p>
       </form>
       <div class="portal-links">
         <a href="./forgot-password.html">Forgot password?</a>

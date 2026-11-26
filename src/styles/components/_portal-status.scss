@@ -1,0 +1,220 @@
+/* Shared Portal Status & Form Validation Preset */
+[data-portal-status],
+[data-sdk-status],
+[data-sdk-wishlist-status],
+[data-order-notice],
+[data-checkout-message],
+[data-profile-status],
+.portal-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0.5rem 0;
+  padding: 0.8rem 1rem;
+  border-radius: var(--ps-radius, 10px);
+  border: 1px solid var(--ps-info-border);
+  border-left-width: 4px;
+  background: var(--ps-info-bg);
+  color: var(--ps-info-text) !important;
+  font-family: var(--ps-font, inherit);
+  font-size: 0.9375rem;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+[data-portal-status][hidden],
+[data-sdk-status][hidden],
+[data-sdk-wishlist-status][hidden],
+[data-order-notice][hidden],
+[data-checkout-message][hidden],
+[data-profile-status][hidden],
+.portal-status[hidden],
+[data-portal-status]:empty,
+[data-sdk-status]:empty,
+[data-sdk-wishlist-status]:empty,
+[data-order-notice]:empty,
+[data-checkout-message]:empty,
+[data-profile-status]:empty,
+.portal-status:empty {
+  display: none !important;
+}
+
+[data-portal-status]::before,
+[data-sdk-status]::before,
+[data-sdk-wishlist-status]::before,
+[data-order-notice]::before,
+[data-checkout-message]::before,
+[data-profile-status]::before,
+.portal-status::before {
+  content: 'i';
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 1.25rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.08rem;
+  border-radius: 999px;
+  border: 1.5px solid currentColor;
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* Error */
+[data-portal-status][data-status-type='error'],
+[data-portal-status][data-state='error'],
+[data-sdk-status][data-status-type='error'],
+[data-sdk-wishlist-status][data-status-type='error'],
+[data-order-notice][data-status-type='error'],
+[data-checkout-message][data-status-type='error'],
+[data-profile-status][data-status-type='error'],
+.portal-status--error {
+  border-color: var(--ps-error-border);
+  background: var(--ps-error-bg);
+  color: var(--ps-error-text) !important;
+}
+[data-portal-status][data-status-type='error']::before,
+[data-portal-status][data-state='error']::before,
+[data-sdk-status][data-status-type='error']::before,
+[data-sdk-wishlist-status][data-status-type='error']::before,
+[data-order-notice][data-status-type='error']::before,
+[data-checkout-message][data-status-type='error']::before,
+[data-profile-status][data-status-type='error']::before,
+.portal-status--error::before {
+  content: '!';
+}
+
+/* Success */
+[data-portal-status][data-status-type='success'],
+[data-sdk-status][data-status-type='success'],
+[data-sdk-wishlist-status][data-status-type='success'],
+[data-order-notice][data-status-type='success'],
+[data-checkout-message][data-status-type='success'],
+[data-profile-status][data-status-type='success'],
+.portal-status--success {
+  border-color: var(--ps-success-border);
+  background: var(--ps-success-bg);
+  color: var(--ps-success-text) !important;
+}
+[data-portal-status][data-status-type='success']::before,
+[data-sdk-status][data-status-type='success']::before,
+[data-sdk-wishlist-status][data-status-type='success']::before,
+[data-order-notice][data-status-type='success']::before,
+[data-checkout-message][data-status-type='success']::before,
+[data-profile-status][data-status-type='success']::before,
+.portal-status--success::before {
+  content: '✓';
+}
+
+/* Warning */
+[data-portal-status][data-status-type='warning'],
+[data-sdk-status][data-status-type='warning'],
+[data-order-notice][data-status-type='warning'],
+[data-checkout-message][data-status-type='warning'],
+[data-profile-status][data-status-type='warning'] {
+  border-color: var(--ps-warning-border);
+  background: var(--ps-warning-bg);
+  color: var(--ps-warning-text) !important;
+}
+[data-portal-status][data-status-type='warning']::before,
+[data-sdk-status][data-status-type='warning']::before,
+[data-order-notice][data-status-type='warning']::before,
+[data-checkout-message][data-status-type='warning']::before,
+[data-profile-status][data-status-type='warning']::before {
+  content: '!';
+}
+
+/* Loading */
+[data-portal-status][data-status-type='loading']::before,
+[data-sdk-status][data-status-type='loading']::before,
+[data-order-notice][data-status-type='loading']::before,
+[data-checkout-message][data-status-type='loading']::before,
+[data-profile-status][data-status-type='loading']::before {
+  content: '';
+  border-color: currentColor transparent currentColor currentColor;
+  animation: ps-spin 0.8s linear infinite;
+}
+
+@keyframes ps-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Field-level validation */
+input[aria-invalid='true'],
+select[aria-invalid='true'],
+textarea[aria-invalid='true'] {
+  border-color: var(--ps-field-error-border, var(--ps-error-border)) !important;
+  box-shadow: 0 0 0 2px var(--ps-error-bg);
+}
+
+.portal-field-error,
+[data-field-error],
+.field-error {
+  margin: 0.35rem 0 0;
+  color: var(--ps-error-text) !important;
+  font-family: var(--ps-font, inherit);
+  font-size: 0.84rem;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.portal-field-error:empty,
+[data-field-error]:empty,
+.field-error:empty {
+  display: none;
+}
+
+button[data-loading='true'] {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.portal-consent-row,
+label.checkbox-label,
+.checkbox-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.portal-consent-row input[type='checkbox'],
+label.checkbox-label input[type='checkbox'],
+.checkbox-field input[type='checkbox'],
+input[type='checkbox'][name='accept_terms'] {
+  width: auto !important;
+  min-width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin: 3px 0 0;
+}
+
+.portal-consent-note {
+  margin: 0.25rem 0 0;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  opacity: 0.85;
+}
+
+.portal-consent-note a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-portal-status][data-status-type='loading']::before,
+  [data-sdk-status][data-status-type='loading']::before,
+  [data-order-notice][data-status-type='loading']::before,
+  [data-checkout-message][data-status-type='loading']::before,
+  [data-profile-status][data-status-type='loading']::before {
+    animation: none !important;
+  }
+}

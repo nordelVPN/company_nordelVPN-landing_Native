@@ -39,27 +39,6 @@
   font: inherit;
 }
 
-.portal-status {
-  padding: 0.75rem 1rem;
-  border-radius: 0.65rem;
-  font-size: 0.92rem;
-  border: 1px solid transparent;
-}
-
-.portal-status[hidden] {
-  display: none;
-}
-
-.portal-status--error {
-  border-color: rgba(239, 68, 68, 0.45);
-  background: rgba(239, 68, 68, 0.1);
-}
-
-.portal-status--success {
-  border-color: rgba(34, 197, 94, 0.45);
-  background: rgba(34, 197, 94, 0.1);
-}
-
 .portal-links {
   display: flex;
   flex-wrap: wrap;

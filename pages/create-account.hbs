@@ -4,8 +4,8 @@
       <p class="eyebrow">Nordel Account</p>
       <h1>Create Account</h1>
       <p class="lead">Start your private connection in seconds.</p>
-      <form class="portal-form" data-portal-register>
-        <div class="portal-status" data-portal-status hidden role="status"></div>
+      <form class="portal-form" data-portal-register novalidate>
+        <div class="portal-status" data-portal-status hidden role="status" aria-live="polite"></div>
         <label class="portal-field">
           <span>Display Name</span>
           <input type="text" name="display_name" autocomplete="name" placeholder="Alex">
@@ -22,9 +22,9 @@
           <span>Confirm Password</span>
           <input type="password" name="password_confirmation" required minlength="8" autocomplete="new-password">
         </label>
-        <label>
+        <label class="checkbox-label">
           <input type="checkbox" name="accept_terms" required>
-          I agree to the <a href="./terms.html">Terms of Use</a> and <a href="./privacy.html">Privacy Policy</a>.
+          <span>I agree to the <a href="./terms.html">Terms of Use</a> and <a href="./privacy.html">Privacy Policy</a>.</span>
         </label>
         <button class="button" type="submit">Create Account ↗</button>
       </form>
