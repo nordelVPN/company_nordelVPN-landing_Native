@@ -8,6 +8,12 @@
   {{#if canonical}}<link rel="canonical" href="{{canonical}}">{{/if}}
   <meta name="color-scheme" content="light dark">
   {{#if isAccount}}<style>[data-auth-gate][hidden]{display:none!important;}</style><script>(function(){try{if(window.__VPN_PORTAL_CONFIG__&&window.__VPN_PORTAL_CONFIG__.mode==='demo')return;if(!window.localStorage.getItem('nordel-vpn-portal:token')){window.location.replace('./login.html');}}catch(e){window.location.replace('./login.html');}})();</script>{{/if}}
+  <script async src="https://www.googletagmanager.com/gtm.js?id=GTM-NJZH6VD5"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+  </script>
 </head>
 <body>
   <a class="skip-link" href="#main-content"><span data-i18n="skip">Skip to content</span></a>
