@@ -9,6 +9,7 @@ function createQrMatrix(text) {
 var sdk = sdkFactory.createVpnPortalSdk({ brandSlug: 'nordel' });
 sdkFactory.syncAccountNavLinks(sdk);
 var siteConfigPromise = sdk.getSiteConfig();
+sdkFactory.bindPageBoot(siteConfigPromise);
 var DEFAULT_PLANS = [
   { plan_code: 'trial', name: 'Trial', period: '5 days', price_minor: 50 },
   { plan_code: 'basic', name: 'Basic', period: '1 month', price_minor: 700 },
@@ -28,6 +29,7 @@ function syncNordelWishlistBotUrls(cfg) {
 }
 siteConfigPromise.then(function (cfg) {
   currentSiteConfig = cfg;
+  sdkFactory.syncAccountNavLinks(sdk);
   var isWishlist = sdkFactory.isSiteInWishlistMode(cfg);
   document.documentElement.dataset.launchMode = isWishlist ? 'wishlist_only' : 'live';
   if (isWishlist) {

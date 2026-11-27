@@ -2099,6 +2099,7 @@ function guardGuestAuthPages(sdk) {
 function syncAccountNavLinks(sdk) {
   if (typeof document === 'undefined' || !sdk || typeof document.querySelectorAll !== 'function') return;
   const isAuth = Boolean(sdk.isAuthenticated());
+  const wishlistOnly = isSiteInWishlistMode(sdk._siteConfigCache);
   const target = (isAuth || sdk.mode === 'demo') ? './account.html' : './login.html';
 
   if (document.documentElement && typeof document.documentElement.setAttribute === 'function') {
@@ -2132,7 +2133,7 @@ function syncAccountNavLinks(sdk) {
   });
 
   document.querySelectorAll('[data-guest-only]').forEach((el) => {
-    toggleEl(el, !isAuth);
+    toggleEl(el, !isAuth && !wishlistOnly);
   });
 
   document.querySelectorAll('header a, footer a, .header a, .site-header a, .footer a, .site-footer a, [data-nav-root] a').forEach((link) => {
@@ -2141,7 +2142,7 @@ function syncAccountNavLinks(sdk) {
     }
     const href = (typeof link.getAttribute === 'function' && link.getAttribute('href')) || '';
     if (!GUEST_AUTH_HREF_RE.test(href)) return;
-    toggleEl(link, !isAuth);
+    toggleEl(link, !isAuth && !wishlistOnly);
   });
 
   guardGuestAuthPages(sdk);
@@ -2343,6 +2344,47 @@ function revealAuthGate() {
     el.hidden = true;
     el.setAttribute('aria-busy', 'false');
   });
+  try {
+    if (typeof window !== 'undefined' && typeof window.Event === 'function') { document.dispatchEvent(new window.Event('vpn-auth-gate-ready')); }
+  } catch { /* CustomEvent is optional in non-browser tests. */ }
+}
+
+function bindPageBoot(pending) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  const root = document.documentElement;
+  if (!root || typeof root.hasAttribute !== 'function' || !root.hasAttribute('data-page-boot')) return;
+
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    const paint = () => {
+      if (typeof root.removeAttribute === 'function') root.removeAttribute('data-page-boot');
+      if (typeof document.querySelectorAll !== 'function') return;
+      document.querySelectorAll('[data-page-boot-screen]').forEach((el) => {
+        el.hidden = true;
+        if (typeof el.setAttribute === 'function') el.setAttribute('aria-busy', 'false');
+      });
+    };
+    if (typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(() => window.requestAnimationFrame(paint));
+    } else {
+      paint();
+    }
+  };
+
+  const authGate = typeof document.querySelector === 'function' ? document.querySelector('[data-auth-gate]') : null;
+  const authReady = (!authGate || authGate.hidden === false)
+    ? Promise.resolve()
+    : new Promise((resolve) => {
+      document.addEventListener('vpn-auth-gate-ready', () => resolve(), { once: true });
+    });
+  const loaded = document.readyState === 'complete'
+    ? Promise.resolve()
+    : new Promise((resolve) => window.addEventListener('load', () => resolve(), { once: true }));
+  const configReady = Promise.resolve(pending).then(() => null, () => null);
+  const cap = new Promise((resolve) => window.setTimeout(resolve, 8000));
+  Promise.race([Promise.all([configReady, loaded, authReady]), cap]).then(release, release);
 }
 
 
@@ -4188,6 +4230,7 @@ module.exports = {
   savePlanSelectionHandoff,
   consumePlanSelectionHandoff,
   revealAuthGate,
+  bindPageBoot,
   getWishlistUiText,
   isSiteInWishlistMode,
   isSiteServersEnabled,
