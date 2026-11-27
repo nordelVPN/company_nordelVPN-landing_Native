@@ -1,6 +1,6 @@
 # Wishlist navigation closeout
 
-Status: implementation and local QA PASS; production verification follows push.
+Status: DONE — implementation, local QA and production browser verification PASS (2026-11-27). Production deploy workflows succeeded on all four domains.
 
 Scope: GIT-01 page boot screen; UX-01 CTA labels/links; UX-02 hide guest auth navigation during wishlist_only. Existing accounts and direct auth routes remain available; no backend registration policy changed.
 
