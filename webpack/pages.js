@@ -8,7 +8,7 @@ module.exports = {
   about: {
     template: './pages/about.hbs',
     data: './src/data/about.js',
-    modules: ['i18n', 'theme-toggle', 'navigation', 'wishlist', 'support-widget'],
+    modules: ['i18n', 'theme-toggle', 'navigation', 'wishlist', 'portal', 'support-widget'],
     styles: ['base', 'pages/about']
   },
   login: {
@@ -38,13 +38,13 @@ module.exports = {
   privacy: {
     template: './pages/privacy.hbs',
     data: './src/data/privacy.js',
-    modules: ['i18n', 'theme-toggle', 'navigation', 'wishlist', 'support-widget'],
+    modules: ['i18n', 'theme-toggle', 'navigation', 'wishlist', 'portal', 'support-widget'],
     styles: ['base', 'pages/portal']
   },
   terms: {
     template: './pages/terms.hbs',
     data: './src/data/terms.js',
-    modules: ['i18n', 'theme-toggle', 'navigation', 'wishlist', 'support-widget'],
+    modules: ['i18n', 'theme-toggle', 'navigation', 'wishlist', 'portal', 'support-widget'],
     styles: ['base', 'pages/portal']
   }
 };

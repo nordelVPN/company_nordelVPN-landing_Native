@@ -5,8 +5,13 @@ function initWishlist() {
   let opener;
   document.querySelectorAll('[data-wishlist-open]').forEach((button) => {
     button.addEventListener('click', () => {
+      if (document.documentElement.dataset.launchMode === 'wishlist_only') return;
       opener = button;
-      if (!dialog.open) dialog.showModal();
+      if (typeof window.__nordelOpenPlanDialog === 'function') {
+        window.__nordelOpenPlanDialog(button.getAttribute('data-checkout-plan') || 'plus', button);
+      } else if (!dialog.open) {
+        dialog.showModal();
+      }
     });
   });
 
@@ -22,7 +27,11 @@ function initWishlist() {
       dialog.close();
     }
   });
-  dialog.addEventListener('close', () => opener?.focus());
+  dialog.addEventListener('close', () => {
+    const target = window.__nordelPlanDialogOpener || opener;
+    if (target && typeof target.focus === 'function') target.focus();
+    window.__nordelPlanDialogOpener = null;
+  });
 }
 
 if (document.readyState === 'loading') {

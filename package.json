@@ -42,5 +42,8 @@
     "last 2 versions",
     "Firefox ESR",
     "not dead"
-  ]
+  ],
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  }
 }

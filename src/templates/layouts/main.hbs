@@ -7,7 +7,7 @@
   <meta name="description" data-i18n-content="{{#if landing}}index{{else}}about{{/if}}.description" content="{{description}}">
   {{#if canonical}}<link rel="canonical" href="{{canonical}}">{{/if}}
   <meta name="color-scheme" content="light dark">
-  {{#if isAccount}}<style>[data-auth-gate][hidden]{display:none!important;}</style><script>(function(){try{if(window.__VPN_PORTAL_CONFIG__&&window.__VPN_PORTAL_CONFIG__.mode==='demo')return;if(!window.localStorage.getItem('nordel-vpn-portal:token')){window.location.replace('./login.html');}}catch(e){window.location.replace('./login.html');}})();</script>{{/if}}
+  {{#if isAccount}}<style>[data-auth-gate][hidden]{display:none!important;}[data-auth-gate]:not([hidden]){animation:auth-gate-reveal .16s ease-out;}[data-auth-gate]:not([hidden])+[data-auth-gate-loader],[data-auth-gate-loader][hidden]{display:none!important;}.auth-gate-loader{min-height:72vh;padding:clamp(2.25rem,4vw,3.5rem) clamp(1rem,4vw,2.5rem);display:grid;align-content:start;gap:1.5rem;max-width:1280px;width:100%;margin:0 auto;box-sizing:border-box;}.auth-gate-loader__top{display:flex;align-items:center;gap:.75rem;}.auth-gate-loader__spinner{width:20px;height:20px;border-radius:50%;border:2.5px solid color-mix(in srgb,currentColor 20%,transparent);border-top-color:currentColor;animation:auth-gate-spin .75s linear infinite;flex-shrink:0;}.auth-gate-loader__grid{display:grid;grid-template-columns:260px minmax(0,1fr);gap:2rem;align-items:start;}.auth-gate-loader__sidebar,.auth-gate-loader__card{border-radius:16px;border:1px solid color-mix(in srgb,currentColor 14%,transparent);background:color-mix(in srgb,currentColor 4%,transparent);padding:1.25rem;display:grid;gap:.85rem;}.auth-gate-loader__main{display:grid;gap:1.25rem;}.auth-gate-loader__bar{height:14px;border-radius:8px;background:color-mix(in srgb,currentColor 12%,transparent);animation:auth-gate-pulse 1.3s ease-in-out infinite;}.auth-gate-loader__bar--title{height:24px;width:42%;}.auth-gate-loader__bar--wide{width:85%;}.auth-gate-loader__bar--mid{width:62%;}.auth-gate-loader__bar--btn{height:38px;width:160px;border-radius:999px;margin-top:.25rem;}@keyframes auth-gate-spin{to{transform:rotate(360deg);}}@keyframes auth-gate-pulse{0%,100%{opacity:.45;}50%{opacity:.9;}}@keyframes auth-gate-reveal{from{opacity:0;}to{opacity:1;}}@media(max-width:960px){.auth-gate-loader__grid{grid-template-columns:1fr;}}@media(prefers-reduced-motion:reduce){[data-auth-gate]:not([hidden]),.auth-gate-loader__spinner,.auth-gate-loader__bar{animation:none;}}</style><script>(function(){try{if(window.__VPN_PORTAL_CONFIG__&&window.__VPN_PORTAL_CONFIG__.mode==='demo')return;if(!window.localStorage.getItem('nordel-vpn-portal:token')){window.location.replace('./login.html');}}catch(e){window.location.replace('./login.html');}})();</script>{{/if}}
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-ZL3FK3YC63"></script>
   <script>
     window.dataLayer = window.dataLayer || [];
@@ -20,6 +20,18 @@
   <a class="skip-link" href="#main-content"><span data-i18n="skip">Skip to content</span></a>
   {{> header}}
   <main id="main-content"{{#if isAccount}} hidden data-auth-gate{{/if}}>{{{body}}}</main>
+  {{#if isAccount}}
+  <div class="auth-gate-loader" data-auth-gate-loader role="status" aria-busy="true" aria-label="Loading account">
+    <div class="auth-gate-loader__top"><span class="auth-gate-loader__spinner" aria-hidden="true"></span><span class="auth-gate-loader__bar auth-gate-loader__bar--title"></span></div>
+    <div class="auth-gate-loader__grid">
+      <div class="auth-gate-loader__sidebar"><span class="auth-gate-loader__bar auth-gate-loader__bar--wide"></span><span class="auth-gate-loader__bar auth-gate-loader__bar--mid"></span><span class="auth-gate-loader__bar auth-gate-loader__bar--wide"></span><span class="auth-gate-loader__bar auth-gate-loader__bar--mid"></span></div>
+      <div class="auth-gate-loader__main">
+        <div class="auth-gate-loader__card"><span class="auth-gate-loader__bar auth-gate-loader__bar--title"></span><span class="auth-gate-loader__bar auth-gate-loader__bar--wide"></span><span class="auth-gate-loader__bar auth-gate-loader__bar--btn"></span></div>
+        <div class="auth-gate-loader__card"><span class="auth-gate-loader__bar auth-gate-loader__bar--mid"></span><span class="auth-gate-loader__bar auth-gate-loader__bar--wide"></span><span class="auth-gate-loader__bar auth-gate-loader__bar--mid"></span></div>
+      </div>
+    </div>
+  </div>
+  {{/if}}
   {{> footer}}
   {{> wishlist}}
 </body>

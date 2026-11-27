@@ -30,6 +30,7 @@
 :root[data-theme="dark"] { @include dark-tokens; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme]) { @include dark-tokens; } }
 * { box-sizing: border-box; }
+[hidden], [data-billing-ui] { display: none !important; }
 html { scroll-behavior: smooth; scroll-padding-top: 112px; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.6 Arial, sans-serif; }
 a { color: inherit; text-decoration: none; }
@@ -43,7 +44,7 @@ button, select { color: inherit; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .skip-link { position: fixed; top: -100px; left: 20px; z-index: 50; padding: 12px; background: var(--surface); }
 .skip-link:focus { top: 8px; }
-.site-header { position: sticky; top: 0; z-index: 10; background: var(--bg); }
+.site-header { position: sticky; top: 0; z-index: 40; background: var(--bg); background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
 .site-header__inner { min-height: 92px; padding-block: 10px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .logo { display: inline-flex; gap: 10px; align-items: center; flex-shrink: 0; font-size: 28px; font-weight: 700; letter-spacing: -1.7px; line-height: 1; }
 .brand-mark { width: 38px; height: 28px; flex-shrink: 0; }
@@ -64,9 +65,33 @@ h1, h2, h3 { line-height: 1.12; letter-spacing: -.045em; }
 h2 { font-size: 54px; }
 .eyebrow { color: var(--highlight); text-transform: uppercase; font-size: 11px; line-height: 1.6; letter-spacing: 1.8px; font-weight: 700; }
 .lead { color: var(--muted); line-height: 1.8; }
-.wishlist { width: min(480px, calc(100% - 32px)); padding: 40px; border: 1px solid var(--border); border-radius: 20px; background: var(--surface); color: var(--text); }
+.wishlist { width: min(520px, calc(100% - 32px)); padding: 32px; border: 1px solid var(--border); border-radius: 20px; background: var(--surface); color: var(--text); box-shadow: 0 24px 64px rgb(0 0 0 / 28%); }
 .wishlist::backdrop { background: rgb(0 0 0 / 55%); }
-.wishlist h2 { font-size: 30px; }
+.wishlist h2 { font-size: 28px; margin-bottom: 16px; }
+.wishlist-summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; margin-bottom: 16px; border: 1px solid var(--popular-border); border-radius: 14px; background: var(--popular); }
+.wishlist-summary strong { display: block; font-size: 16px; }
+.wishlist-summary__period { color: var(--muted); font-size: 13px; }
+.wishlist-summary__price { font-size: 22px; white-space: nowrap; }
+.wishlist-form { display: grid; gap: 14px; }
+.wishlist-field { display: grid; gap: 8px; }
+.wishlist-field__label, .wishlist-field > span { font-weight: 700; font-size: 13px; color: var(--muted); }
+.wishlist-field input[type="email"] { width: 100%; min-height: 44px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); color: var(--text); font: inherit; }
+.wishlist-plans { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.wishlist-plan-option { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); cursor: pointer; font-size: 13px; transition: border-color .15s ease, background .15s ease; }
+.wishlist-plan-option input { position: absolute; opacity: 0; pointer-events: none; }
+.wishlist-plan-option:has(input:checked) { border-color: var(--accent); background: var(--popular); }
+.wishlist-plan-option:has(input:focus-visible) { outline: 3px solid var(--highlight); outline-offset: 2px; }
+.wishlist-plan-option__name { font-weight: 700; }
+.wishlist-plan-option__price { white-space: nowrap; }
+.wishlist-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.wishlist-actions .button { width: 100%; padding-inline: 14px; text-align: center; }
+.wishlist-tg-link { width: 100%; }
+.wishlist-legal { margin: 4px 0 0; font-size: 12px; color: var(--muted); text-align: center; }
+.wishlist-legal a { text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 520px) {
+  .wishlist { padding: 24px 18px; }
+  .wishlist-plans, .wishlist-actions { grid-template-columns: 1fr; }
+}
 .dialog-close { position: absolute; right: 8px; top: 8px; width: 40px; height: 40px; border: 0; background: none; font-size: 28px; }
 .section { padding-block: 80px; }
 .site-footer { padding-block: 44px 24px; border-top: 1px solid var(--border); background: var(--bg); }
@@ -111,3 +136,4 @@ h2 { font-size: 54px; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation: none !important; transition: none !important; } }
 
 @import './components/portal-status';
+@import './components/vpn-connect';

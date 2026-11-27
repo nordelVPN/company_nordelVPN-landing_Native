@@ -484,7 +484,12 @@ class VpnPortalSDK {
     return { ...this._siteConfigCache };
   }
 
-  async joinWishlist({ email, fullName, full_name, planCode, plan_code, language, meta } = {}) {
+  buildWishlistBotUrl(options = {}) {
+    const cfg = this._siteConfigCache || this._defaultSiteConfig('wishlist_only');
+    return buildWishlistBotUrl(cfg, options);
+  }
+
+  async joinWishlist({ email, fullName, full_name, planCode, plan_code, language, source, meta } = {}) {
     const cleanEmail = String(email || '').trim();
     if (!cleanEmail || !cleanEmail.includes('@')) {
       throw new PortalApiError('Please enter a valid email address.', {
@@ -500,13 +505,27 @@ class VpnPortalSDK {
       : 'en';
     const cleanLang = String(language || docLang || 'en').slice(0, 5).toLowerCase();
 
+    const mergedMeta = (meta && typeof meta === 'object') ? { ...meta } : {};
+    if (typeof window !== 'undefined' && window.location && window.location.search) {
+      try {
+        const params = new window.URLSearchParams(window.location.search);
+        ['utm_source', 'utm_medium', 'utm_campaign'].forEach((k) => {
+          const val = params.get(k);
+          if (val && !mergedMeta[k]) mergedMeta[k] = val;
+        });
+      } catch {
+        // ignore URLSearchParams errors
+      }
+    }
+
     const payload = {
       email: cleanEmail,
       language: cleanLang,
     };
     if (cleanName) payload.full_name = cleanName;
     if (cleanPlan) payload.plan_code = cleanPlan;
-    if (meta && typeof meta === 'object') payload.meta = meta;
+    if (source && typeof source === 'string') payload.source = source.trim();
+    if (Object.keys(mergedMeta).length > 0) payload.meta = mergedMeta;
 
     if (this.mode === 'live') {
       return this._request(
@@ -533,6 +552,16 @@ class VpnPortalSDK {
 
     const existing = entries.find((item) => String(item.email || '').toLowerCase() === cleanEmail.toLowerCase());
     if (existing) {
+      if (cleanName) existing.full_name = cleanName;
+      if (cleanPlan) existing.plan_code = cleanPlan;
+      existing.language = cleanLang;
+      if (payload.source) existing.source = payload.source;
+      if (payload.meta) existing.meta = { ...(existing.meta || {}), ...payload.meta };
+      try {
+        this.storage.setItem(storageKey, JSON.stringify(entries));
+      } catch {
+        // ignore storage quota errors
+      }
       return {
         status: 'accepted',
         already_registered: true,
@@ -565,13 +594,31 @@ class VpnPortalSDK {
     };
   }
 
+  // ---- Plan Selection Handoff ----
+
+  savePlanSelectionHandoff({ email, planCode } = {}) {
+    return savePlanSelectionHandoff(this, { email, planCode });
+  }
+
+  consumePlanSelectionHandoff() {
+    return consumePlanSelectionHandoff(this);
+  }
+
   // ---- Auth ----
 
-  async register({ email, password, password_confirmation, display_name, accept_terms = true }) {
+  async register({ email, password, password_confirmation, display_name, accept_terms = true, plan_code, planCode, language }) {
+    const cleanPlan = String(plan_code ?? planCode ?? '').trim();
+    const docLang = (typeof document !== 'undefined' && document.documentElement && document.documentElement.lang)
+      ? document.documentElement.lang.slice(0, 2).toLowerCase()
+      : 'en';
+    const cleanLang = String(language || docLang || 'en').slice(0, 5).toLowerCase();
+
     if (this.mode === 'live') {
+      const body = { email, password, password_confirmation: password_confirmation ?? password, display_name, accept_terms, language: cleanLang };
+      if (cleanPlan) body.plan_code = cleanPlan;
       const data = await this._request(this.dashboardApiUrl, '/api/v1/portal/auth/register', {
         method: 'POST',
-        body: { email, password, password_confirmation: password_confirmation ?? password, display_name, accept_terms },
+        body,
       });
       if (data?.token) this.setToken(data.token);
       return data;
@@ -2011,12 +2058,278 @@ function initCheckoutReturnPolling(sdk, options = {}) {
   return false;
 }
 
+const GUEST_AUTH_HREF_RE = /(?:^|\/|\.\/)(?:login|create-account|forgot-password)\.html(?:[?#]|$)/i;
+
+function guardGuestAuthPages(sdk) {
+  if (typeof window === 'undefined' || !window.location || !sdk) return false;
+  if (!sdk.isAuthenticated() || sdk.mode !== 'live') return false;
+
+  const pathname = String(window.location.pathname || '');
+  const isLoginOrReg = /(?:^|\/)(?:login|create-account)(?:\.html)?\/?$/i.test(pathname);
+  const isForgot = /(?:^|\/)forgot-password(?:\.html)?\/?$/i.test(pathname);
+  if (!isLoginOrReg && !isForgot) return false;
+
+  const params = new window.URLSearchParams(window.location.search || '');
+  if (isForgot && params.has('token')) {
+    return false;
+  }
+
+  if (sdk._authGuardPending) return true;
+  sdk._authGuardPending = true;
+
+  sdk.getMe().then((res) => {
+    if (res && res.client) {
+      const plan = params.get('plan');
+      const dest = plan ? `./account.html?plan=${encodeURIComponent(plan)}` : './account.html';
+      window.location.replace(dest);
+    } else {
+      sdk._authGuardPending = false;
+    }
+  }).catch((err) => {
+    sdk._authGuardPending = false;
+    if (err && (err.status === 401 || err.code === 'UNAUTHORIZED')) {
+      sdk.clearSession();
+      syncAccountNavLinks(sdk);
+    }
+  });
+
+  return true;
+}
+
 function syncAccountNavLinks(sdk) {
-  if (typeof document === 'undefined' || !sdk) return;
-  const target = (sdk.isAuthenticated() || sdk.mode === 'demo') ? './account.html' : './login.html';
+  if (typeof document === 'undefined' || !sdk || typeof document.querySelectorAll !== 'function') return;
+  const isAuth = Boolean(sdk.isAuthenticated());
+  const target = (isAuth || sdk.mode === 'demo') ? './account.html' : './login.html';
+
+  if (document.documentElement && typeof document.documentElement.setAttribute === 'function') {
+    document.documentElement.setAttribute('data-auth-state', isAuth ? 'authenticated' : 'guest');
+  }
+
+  const toggleEl = (el, show) => {
+    if (!el) return;
+    el.hidden = !show;
+    if (show) {
+      if (typeof el.removeAttribute === 'function') {
+        el.removeAttribute('hidden');
+        el.removeAttribute('aria-hidden');
+      }
+    } else if (typeof el.setAttribute === 'function') {
+      el.setAttribute('aria-hidden', 'true');
+    }
+  };
+
   document.querySelectorAll('a[data-account-link]').forEach((link) => {
     link.setAttribute('href', target);
+    if (isAuth) {
+      toggleEl(link, true);
+    } else if (typeof link.hasAttribute === 'function' && link.hasAttribute('data-auth-only')) {
+      toggleEl(link, false);
+    }
   });
+
+  document.querySelectorAll('[data-auth-only]').forEach((el) => {
+    toggleEl(el, isAuth);
+  });
+
+  document.querySelectorAll('[data-guest-only]').forEach((el) => {
+    toggleEl(el, !isAuth);
+  });
+
+  document.querySelectorAll('header a, footer a, .header a, .site-header a, .footer a, .site-footer a, [data-nav-root] a').forEach((link) => {
+    if (typeof link.hasAttribute === 'function' && (link.hasAttribute('data-account-link') || link.hasAttribute('data-auth-only'))) {
+      return;
+    }
+    const href = (typeof link.getAttribute === 'function' && link.getAttribute('href')) || '';
+    if (!GUEST_AUTH_HREF_RE.test(href)) return;
+    toggleEl(link, !isAuth);
+  });
+
+  guardGuestAuthPages(sdk);
+}
+
+function initAccountTabs(root, options = {}) {
+  if (typeof document === 'undefined' || !root) return null;
+  const allTabs = Array.from(root.querySelectorAll('[role="tab"]'));
+  if (!allTabs.length) return null;
+
+  const getTabId = (tab) => (
+    tab.getAttribute('data-account-tab')
+    || tab.getAttribute('data-tab')
+    || (tab.getAttribute('aria-controls') || '').replace(/^panel-/, '')
+  );
+
+  const getPanelForTab = (tab) => {
+    const controls = tab.getAttribute('aria-controls');
+    if (controls) {
+      const byId = document.getElementById(controls);
+      if (byId) return byId;
+    }
+    const id = getTabId(tab);
+    return id ? root.querySelector(`[data-account-panel="${id}"], [data-panel="${id}"]`) : null;
+  };
+
+  const getVisibleTabs = () => allTabs.filter((tab) => !tab.hidden && !tab.hasAttribute('data-billing-ui'));
+
+  let activeId = '';
+
+  const activate = (requestedId, { focus = false, updateHash = false } = {}) => {
+    const visible = getVisibleTabs();
+    if (!visible.length) return;
+    const chosen = visible.find((t) => getTabId(t) === requestedId) || visible[0];
+    const chosenId = getTabId(chosen);
+    activeId = chosenId;
+
+    allTabs.forEach((tab) => {
+      const isActive = tab === chosen && !tab.hidden;
+      tab.setAttribute('aria-selected', String(isActive));
+      tab.tabIndex = isActive ? 0 : -1;
+      if (tab.classList) tab.classList.toggle('is-active', isActive);
+      const panel = getPanelForTab(tab);
+      if (panel) {
+        panel.hidden = !isActive || panel.hasAttribute('data-billing-ui');
+      }
+    });
+
+    if (focus && typeof chosen.focus === 'function') {
+      chosen.focus();
+    }
+
+    if (updateHash && typeof window !== 'undefined' && window.history && typeof window.history.replaceState === 'function') {
+      try {
+        const nextUrl = new window.URL(window.location.href);
+        nextUrl.hash = chosenId;
+        window.history.replaceState({ tab: chosenId }, '', nextUrl.pathname + nextUrl.search + nextUrl.hash);
+      } catch {
+        // ignore URL errors in non-browser test environments
+      }
+    }
+  };
+
+  allTabs.forEach((tab) => {
+    tab.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (tab.hidden) return;
+      activate(getTabId(tab), { updateHash: true });
+    });
+
+    tab.addEventListener('keydown', (event) => {
+      const visible = getVisibleTabs();
+      const idx = visible.indexOf(tab);
+      if (idx === -1) return;
+      let nextIdx = idx;
+      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+        nextIdx = (idx + 1) % visible.length;
+      } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+        nextIdx = (idx + visible.length - 1) % visible.length;
+      } else if (event.key === 'Home') {
+        nextIdx = 0;
+      } else if (event.key === 'End') {
+        nextIdx = visible.length - 1;
+      } else {
+        return;
+      }
+      event.preventDefault();
+      activate(getTabId(visible[nextIdx]), { focus: true, updateHash: true });
+    });
+  });
+
+  root.querySelectorAll('[data-open-tab], [data-goto-tab]').forEach((trigger) => {
+    trigger.addEventListener('click', (event) => {
+      const targetId = trigger.getAttribute('data-open-tab') || trigger.getAttribute('data-goto-tab');
+      if (!targetId) return;
+      event.preventDefault();
+      activate(targetId, { focus: true, updateHash: true });
+    });
+  });
+
+  const initialHash = (typeof window !== 'undefined' && window.location && window.location.hash)
+    ? decodeURIComponent(window.location.hash.replace(/^#/, ''))
+    : '';
+  const defaultTab = options.defaultTab || getTabId(getVisibleTabs()[0] || allTabs[0]);
+  activate(initialHash || defaultTab, { updateHash: false });
+
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('hashchange', () => {
+      const rawHash = decodeURIComponent((window.location.hash || '').replace(/^#/, ''));
+      if (rawHash && getVisibleTabs().some((t) => getTabId(t) === rawHash)) {
+        activate(rawHash, { updateHash: false });
+      }
+    });
+  }
+
+  return {
+    activate: (tabId, opts) => activate(tabId, opts),
+    refresh: () => activate(activeId || defaultTab, { updateHash: false }),
+    getActiveTab: () => activeId,
+  };
+}
+
+const PLAN_HANDOFF_TTL_MS = 15 * 60 * 1000;
+const MEMORY_PLAN_HANDOFF = new Map();
+
+function resolveHandoffStorage(sdkOrBrand) {
+  const prefix = (sdkOrBrand && typeof sdkOrBrand === 'object' && sdkOrBrand.storagePrefix)
+    ? sdkOrBrand.storagePrefix
+    : `vpn_portal_${String(sdkOrBrand || 'nordel').toLowerCase()}`;
+  const key = `${prefix}:plan-handoff`;
+  let store = null;
+  try {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      store = window.sessionStorage;
+    }
+  } catch {
+    store = null;
+  }
+  return { key, store };
+}
+
+function savePlanSelectionHandoff(sdkOrBrand, { email, planCode } = {}) {
+  const cleanEmail = String(email || '').trim();
+  const cleanPlan = String(planCode || '').trim();
+  if (!cleanEmail && !cleanPlan) return false;
+  const { key, store } = resolveHandoffStorage(sdkOrBrand);
+  const payload = JSON.stringify({
+    email: cleanEmail || '',
+    planCode: cleanPlan || '',
+    expiresAt: Date.now() + PLAN_HANDOFF_TTL_MS,
+  });
+  try {
+    if (store) store.setItem(key, payload);
+    else MEMORY_PLAN_HANDOFF.set(key, payload);
+    return true;
+  } catch {
+    MEMORY_PLAN_HANDOFF.set(key, payload);
+    return true;
+  }
+}
+
+function consumePlanSelectionHandoff(sdkOrBrand) {
+  const { key, store } = resolveHandoffStorage(sdkOrBrand);
+  let raw = null;
+  try {
+    if (store) {
+      raw = store.getItem(key);
+      store.removeItem(key);
+    } else {
+      raw = MEMORY_PLAN_HANDOFF.get(key) || null;
+      MEMORY_PLAN_HANDOFF.delete(key);
+    }
+  } catch {
+    raw = MEMORY_PLAN_HANDOFF.get(key) || null;
+    MEMORY_PLAN_HANDOFF.delete(key);
+  }
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (parsed.expiresAt && Number(parsed.expiresAt) < Date.now()) return null;
+    return {
+      email: String(parsed.email || '').trim(),
+      planCode: String(parsed.planCode || '').trim(),
+    };
+  } catch {
+    return null;
+  }
 }
 
 function revealAuthGate() {
@@ -2025,6 +2338,10 @@ function revealAuthGate() {
     el.hidden = false;
     el.removeAttribute('hidden');
     el.classList.remove('is-auth-pending');
+  });
+  document.querySelectorAll('[data-auth-gate-loader]').forEach((el) => {
+    el.hidden = true;
+    el.setAttribute('aria-busy', 'false');
   });
 }
 
@@ -2054,6 +2371,13 @@ const WISHLIST_UI_I18N = {
     accountWaitlistTitle: "You're on the Waitlist",
     accountWaitlistText: 'Servers will open soon. As soon as the product launches, we will notify you and you will be able to activate your subscription.',
     errorGeneric: 'Could not join the waitlist. Please try again.',
+    selectedPlanLabel: "Selected plan",
+    changePlanLabel: "Choose plan",
+    emailInvalid: "Please enter a valid email address.",
+    registerBtn: "Create account",
+    wishlistBtn: "Add to wishlist",
+    selectedPlanBadge: "Selected plan: {plan} — {price}",
+    planUpdated: "Your wishlist entry has been updated with the selected plan.",
   },
   ru: {
     badge: 'Предзапуск',
@@ -2077,6 +2401,13 @@ const WISHLIST_UI_I18N = {
     accountWaitlistTitle: 'Вы в листе ожидания',
     accountWaitlistText: 'Вы в листе ожидания — серверы скоро откроются. Как только продукт запустится, мы уведомим вас и вы сможете активировать подписку.',
     errorGeneric: 'Не удалось отправить заявку. Попробуйте ещё раз.',
+    selectedPlanLabel: "Выбранный тариф",
+    changePlanLabel: "Выбрать тариф",
+    emailInvalid: "Введите корректный email.",
+    registerBtn: "Регистрация",
+    wishlistBtn: "Добавить в wishlist",
+    selectedPlanBadge: "Выбранный тариф: {plan} — {price}",
+    planUpdated: "Ваш выбранный тариф в листе ожидания обновлён.",
   },
   pl: {
     badge: 'Przedsprzedaż',
@@ -2100,6 +2431,13 @@ const WISHLIST_UI_I18N = {
     accountWaitlistTitle: 'Jesteś na liście oczekujących',
     accountWaitlistText: 'Serwery wkrótce zostaną otwarte. Gdy tylko usługa ruszy, powiadomimy Cię i będziesz móc aktywować subskrypcję.',
     errorGeneric: 'Nie udało się zapisać na listę. Spróbuj ponownie.',
+    selectedPlanLabel: "Wybrany plan",
+    changePlanLabel: "Wybierz plan",
+    emailInvalid: "Wpisz poprawny adres e-mail.",
+    registerBtn: "Zarejestruj się",
+    wishlistBtn: "Dodaj do listy życzeń",
+    selectedPlanBadge: "Wybrany plan: {plan} — {price}",
+    planUpdated: "Twój wpis na liście oczekujących został zaktualizowany o wybrany plan.",
   },
   uk: {
     badge: 'Передзапуск',
@@ -2123,6 +2461,13 @@ const WISHLIST_UI_I18N = {
     accountWaitlistTitle: 'Ви в листі очікування',
     accountWaitlistText: 'Сервери незабаром відкриються. Щойно продукт запуститься, ми повідомимо вас і ви зможете активувати підписку.',
     errorGeneric: 'Не вдалося надіслати заявку. Спробуйте ще раз.',
+    selectedPlanLabel: "Обраний тариф",
+    changePlanLabel: "Обрати тариф",
+    emailInvalid: "Введіть коректну адресу email.",
+    registerBtn: "Реєстрація",
+    wishlistBtn: "Додати у wishlist",
+    selectedPlanBadge: "Обраний тариф: {plan} — {price}",
+    planUpdated: "Ваш обраний тариф у листі очікування оновлено.",
   },
   lt: {
     badge: 'Išankstinis paleidimas',
@@ -2146,6 +2491,13 @@ const WISHLIST_UI_I18N = {
     accountWaitlistTitle: 'Jūs esate laukiančiųjų sąraše',
     accountWaitlistText: 'Serveriai netrukus atsidarys. Kai tik produktas startuos, pranešime jums ir galėsite aktyvuoti prenumeratą.',
     errorGeneric: 'Nepavyko prisijungti prie sąrašo. Bandykite dar kartą.',
+    selectedPlanLabel: "Pasirinktas planas",
+    changePlanLabel: "Pasirinkti planą",
+    emailInvalid: "Įveskite galiojantį el. pašto adresą.",
+    registerBtn: "Registruotis",
+    wishlistBtn: "Pridėti į laukiančiųjų sąrašą",
+    selectedPlanBadge: "Pasirinktas planas: {plan} — {price}",
+    planUpdated: "Jūsų pasirinktas planas laukiančiųjų sąraše atnaujintas.",
   },
   tr: {
     badge: 'Ön lansman',
@@ -2169,6 +2521,13 @@ const WISHLIST_UI_I18N = {
     accountWaitlistTitle: 'Bekleme listesindesiniz',
     accountWaitlistText: 'Sunucular yakında açılacak. Ürün başlatılır başlatılmaz size bildireceğiz ve aboneliğinizi etkinleştirebileceksiniz.',
     errorGeneric: 'Bekleme listesine katılınamadı. Lütfen tekrar deneyin.',
+    selectedPlanLabel: "Seçilen plan",
+    changePlanLabel: "Plan seçin",
+    emailInvalid: "Lütfen geçerli bir e-posta adresi girin.",
+    registerBtn: "Hesap oluştur",
+    wishlistBtn: "Bekleme listesine ekle",
+    selectedPlanBadge: "Seçilen plan: {plan} — {price}",
+    planUpdated: "Bekleme listesi kaydınız seçilen plan ile güncellendi.",
   },
   ro: {
     badge: 'Pre-lansare',
@@ -2192,6 +2551,13 @@ const WISHLIST_UI_I18N = {
     accountWaitlistTitle: 'Ești pe lista de așteptare',
     accountWaitlistText: 'Serverele se vor deschide în curând. De îndată ce produsul se lansează, te vom anunța și vei putea activa abonamentul.',
     errorGeneric: 'Nu am putut trimite cererea. Te rugăm să încerci din nou.',
+    selectedPlanLabel: "Plan selectat",
+    changePlanLabel: "Alege planul",
+    emailInvalid: "Introdu o adresă de email validă.",
+    registerBtn: "Creează cont",
+    wishlistBtn: "Adaugă în wishlist",
+    selectedPlanBadge: "Plan selectat: {plan} — {price}",
+    planUpdated: "Înscrierea ta pe lista de așteptare a fost actualizată cu planul ales.",
   },
   de: {
     badge: 'Vorstart',
@@ -2215,6 +2581,13 @@ const WISHLIST_UI_I18N = {
     accountWaitlistTitle: 'Du bist auf der Warteliste',
     accountWaitlistText: 'Die Server öffnen bald. Sobald das Produkt startet, benachrichtigen wir dich und du kannst dein Abo aktivieren.',
     errorGeneric: 'Anmeldung zur Warteliste fehlgeschlagen. Bitte versuche es erneut.',
+    selectedPlanLabel: "Ausgewählter Tarif",
+    changePlanLabel: "Tarif wählen",
+    emailInvalid: "Bitte geben Sie eine gültige E-Mail-Adresse ein.",
+    registerBtn: "Konto erstellen",
+    wishlistBtn: "Zur Wunschliste hinzufügen",
+    selectedPlanBadge: "Ausgewählter Tarif: {plan} — {price}",
+    planUpdated: "Ihr Eintrag auf der Warteliste wurde mit dem gewählten Tarif aktualisiert.",
   },
   sk: {
     badge: 'Predspustenie',
@@ -2238,6 +2611,13 @@ const WISHLIST_UI_I18N = {
     accountWaitlistTitle: 'Ste na čakacej listine',
     accountWaitlistText: 'Servery sa čoskoro otvoria. Hneď ako sa produkt spustí, dáme vám vedieť a budete si môcť aktivovať predplatné.',
     errorGeneric: 'Nepodarilo sa zapísať na listinu. Skúste to znova.',
+    selectedPlanLabel: "Vybraný plán",
+    changePlanLabel: "Vybrať plán",
+    emailInvalid: "Zadajte platnú e-mailovú adresu.",
+    registerBtn: "Vytvoriť účet",
+    wishlistBtn: "Pridať do zoznamu",
+    selectedPlanBadge: "Vybraný plán: {plan} — {price}",
+    planUpdated: "Váš záznam v zozname čakateľov bol aktualizovaný vybraným plánom.",
   },
   hr: {
     badge: 'Predlansiranje',
@@ -2261,6 +2641,13 @@ const WISHLIST_UI_I18N = {
     accountWaitlistTitle: 'Na listi čekanja ste',
     accountWaitlistText: 'Poslužitelji će se uskoro otvoriti. Čim proizvod krene, obavijestit ćemo vas i moći ćete aktivirati pretplatu.',
     errorGeneric: 'Nije moguće poslati prijavu. Pokušajte ponovno.',
+    selectedPlanLabel: "Odabrani plan",
+    changePlanLabel: "Odaberi plan",
+    emailInvalid: "Unesite valjanu adresu e-pošte.",
+    registerBtn: "Registracija",
+    wishlistBtn: "Dodaj na listu želja",
+    selectedPlanBadge: "Odabrani plan: {plan} — {price}",
+    planUpdated: "Vaš unos na listi čekanja ažuriran je odabranim planom.",
   },
   sr: {
     badge: 'Predlansiranje',
@@ -2284,6 +2671,13 @@ const WISHLIST_UI_I18N = {
     accountWaitlistTitle: 'Na listi čekanja ste',
     accountWaitlistText: 'Serveri će se uskoro otvoriti. Čim proizvod krene, obavestićemo vas i moći ćete da aktivirate pretplatu.',
     errorGeneric: 'Slanje prijave nije uspelo. Pokušajte ponovo.',
+    selectedPlanLabel: "Изабрани план",
+    changePlanLabel: "Изабери план",
+    emailInvalid: "Унесите исправну адресу е-поште.",
+    registerBtn: "Регистрација",
+    wishlistBtn: "Додај на листу жеља",
+    selectedPlanBadge: "Изабрани план: {plan} — {price}",
+    planUpdated: "Ваш унос на листи чекања је ажуриран изабраним планом.",
   },
   bg: {
     badge: 'Предварително стартиране',
@@ -2307,6 +2701,13 @@ const WISHLIST_UI_I18N = {
     accountWaitlistTitle: 'В списъка на чакащите сте',
     accountWaitlistText: 'Сървърите скоро ще се отворят. Щом продуктът стартира, ще ви уведомим и ще можете да активирате абонамента си.',
     errorGeneric: 'Неуспешно записване. Моля, опитайте отново.',
+    selectedPlanLabel: "Избран план",
+    changePlanLabel: "Избери план",
+    emailInvalid: "Моля, въведете валиден имейл адрес.",
+    registerBtn: "Регистрация",
+    wishlistBtn: "Добави в списъка",
+    selectedPlanBadge: "Избран план: {plan} — {price}",
+    planUpdated: "Записът ви в списъка с чакащи бе обновен с избрания план.",
   },
   hu: {
     badge: 'Előindítás',
@@ -2330,6 +2731,13 @@ const WISHLIST_UI_I18N = {
     accountWaitlistTitle: 'A várólistán vagy',
     accountWaitlistText: 'A szerverek hamarosan megnyílnak. Amint a szolgáltatás elindul, értesítünk, és aktiválhatod az előfizetésedet.',
     errorGeneric: 'Nem sikerült feliratkozni. Kérjük, próbáld újra.',
+    selectedPlanLabel: "Kiválasztott csomag",
+    changePlanLabel: "Csomag választása",
+    emailInvalid: "Adjon meg egy érvényes e-mail-címet.",
+    registerBtn: "Fiók létrehozása",
+    wishlistBtn: "Várólistára teszem",
+    selectedPlanBadge: "Kiválasztott csomag: {plan} — {price}",
+    planUpdated: "A várólistás jelentkezését frissítettük a választott csomaggal.",
   },
 };
 
@@ -2357,6 +2765,147 @@ function isSiteCheckoutEnabled(siteConfig) {
   if (!siteConfig || typeof siteConfig !== 'object') return true;
   if (siteConfig.launch_mode === 'wishlist_only') return false;
   return siteConfig.checkout_enabled !== false;
+}
+
+const DEFAULT_WISHLIST_BOT_USERNAME = 'Your_Wishlist_VPN_Official_Bot';
+
+function getCurrentSiteLanguage() {
+  if (typeof document !== 'undefined') {
+    const select = document.querySelector('select[data-language-select]');
+    const selectVal = select && typeof select.value === 'string' ? select.value.trim() : '';
+    const docLang = document.documentElement && document.documentElement.lang
+      ? String(document.documentElement.lang).trim()
+      : '';
+    const raw = selectVal || docLang || 'en';
+    const clean = raw.toLowerCase().replace(/[^a-z]/g, '').slice(0, 2);
+    if (clean.length === 2) return clean;
+  }
+  return 'en';
+}
+
+function buildWishlistBotUrl(siteConfig, options = {}) {
+  const cfg = siteConfig && typeof siteConfig === 'object' ? siteConfig : {};
+  const opts = options && typeof options === 'object' ? options : {};
+
+  let botUsername = '';
+  if (cfg.wishlist_bot_username) {
+    botUsername = String(cfg.wishlist_bot_username).trim().replace(/^@+/, '').replace(/[^A-Za-z0-9_]/g, '');
+  }
+  if (!botUsername && cfg.wishlist_bot_url) {
+    const m = String(cfg.wishlist_bot_url).trim().match(/t\.me\/([A-Za-z0-9_]+)/i);
+    if (m && m[1]) botUsername = m[1];
+  }
+  if (!botUsername) {
+    botUsername = DEFAULT_WISHLIST_BOT_USERNAME;
+  }
+
+  let rawBrand = opts.brand || opts.siteId || opts.site_id || cfg.site_id || '';
+  if (!rawBrand && cfg.wishlist_bot_url) {
+    const mBrand = String(cfg.wishlist_bot_url).match(/[?&]start=site_([A-Za-z0-9]+)/i);
+    if (mBrand && mBrand[1]) rawBrand = mBrand[1];
+  }
+  let brand = String(rawBrand).trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+  const rawPlan = opts.planCode !== undefined ? opts.planCode : opts.plan_code;
+  let plan = rawPlan
+    ? String(rawPlan)
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, '_')
+        .replace(/_{2,}/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 24)
+        .replace(/_+$/g, '')
+    : '';
+
+  const rawLang = opts.language !== undefined ? opts.language : opts.lang;
+  const lang = rawLang
+    ? String(rawLang).trim().toLowerCase().replace(/[^a-z]/g, '').slice(0, 2)
+    : '';
+
+  const siteSeg = brand ? `site_${brand}` : '';
+  const langSeg = lang.length === 2 ? `lang_${lang}` : '';
+
+  const assemble = (bSeg, pVal, lSeg) => [bSeg, pVal ? `plan_${pVal}` : '', lSeg].filter(Boolean).join('__');
+  let payload = assemble(siteSeg, plan, langSeg);
+
+  if (payload.length > 64 && plan) {
+    const withoutPlan = [siteSeg, langSeg].filter(Boolean).join('__');
+    const overhead = (withoutPlan ? withoutPlan.length + 2 : 0) + 5;
+    const maxPlanLen = Math.max(0, 64 - overhead);
+    plan = plan.slice(0, maxPlanLen).replace(/_+$/g, '');
+    payload = assemble(siteSeg, plan, langSeg);
+  }
+  if (payload.length > 64 && brand) {
+    const rest = [plan ? `plan_${plan}` : '', langSeg].filter(Boolean).join('__');
+    const overhead = (rest ? rest.length + 2 : 0) + 5;
+    const maxBrandLen = Math.max(1, 64 - overhead);
+    brand = brand.slice(0, maxBrandLen);
+    payload = assemble(`site_${brand}`, plan, langSeg);
+  }
+  payload = payload.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64).replace(/_+$/g, '');
+
+  return payload
+    ? `https://t.me/${botUsername}?start=${payload}`
+    : `https://t.me/${botUsername}`;
+}
+
+function trackWishlistBotClick({ brand, planCode, language, botUrl } = {}) {
+  if (typeof window === 'undefined') return null;
+  const cleanPlan = planCode
+    ? String(planCode)
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, '_')
+        .replace(/_{2,}/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 24)
+        .replace(/_+$/g, '')
+    : null;
+  const cleanLang = language
+    ? String(language).trim().toLowerCase().replace(/[^a-z]/g, '').slice(0, 2)
+    : null;
+  const payload = {
+    event: 'wishlist_bot_click',
+    brand: String(brand || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '') || null,
+    plan_code: cleanPlan || null,
+    language: cleanLang && cleanLang.length === 2 ? cleanLang : null,
+    bot_url: botUrl || null,
+  };
+  if (!Array.isArray(window.dataLayer)) {
+    window.dataLayer = [];
+  }
+  window.dataLayer.push(payload);
+  return payload;
+}
+
+function openWishlistBot(siteConfig, options = {}) {
+  const opts = options && typeof options === 'object' ? options : {};
+  const language = opts.language !== undefined ? opts.language : getCurrentSiteLanguage();
+  const planCode = opts.planCode !== undefined ? opts.planCode : opts.plan_code;
+  const botUrl = buildWishlistBotUrl(siteConfig, {
+    planCode,
+    language,
+    brand: opts.brand || opts.siteId,
+  });
+
+  trackWishlistBotClick({
+    brand: (siteConfig && siteConfig.site_id) || opts.brand || opts.siteId,
+    planCode,
+    language,
+    botUrl,
+  });
+
+  if (typeof window !== 'undefined' && botUrl) {
+    const ua = (window.navigator && window.navigator.userAgent) || '';
+    const isMobile = /Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(ua);
+    if (isMobile || opts.sameTab === true) {
+      window.location.href = botUrl;
+    } else {
+      window.open(botUrl, '_blank', 'noopener,noreferrer');
+    }
+  }
+  return botUrl;
 }
 
 function renderWishlistCard(sdk, container, options = {}) {
@@ -2640,53 +3189,13 @@ function openWishlistModal(sdk, options = {}) {
   return ctrl;
 }
 
-function mountRegisterWishlistBanner(anchorForm, siteConfig) {
-  if (typeof document === 'undefined' || !anchorForm || !isSiteInWishlistMode(siteConfig)) return null;
-  let banner = document.querySelector('[data-wishlist-register-banner]');
-  if (!banner) {
-    banner = document.createElement('div');
-    banner.setAttribute('data-wishlist-register-banner', '');
-    banner.setAttribute('data-portal-status', '');
-    banner.setAttribute('data-status-type', 'info');
-    banner.setAttribute('role', 'status');
-    banner.style.cssText = 'display:grid;gap:8px;padding:14px 16px;margin-bottom:16px;border:1px solid currentColor;border-radius:12px;';
-    if (anchorForm.parentNode) {
-      anchorForm.parentNode.insertBefore(banner, anchorForm);
-    }
+function mountRegisterWishlistBanner() {
+  // TASK-027: Pre-launch / Join Wishlist banners are removed on all 4 sites.
+  if (typeof document !== 'undefined') {
+    const existing = document.querySelector('[data-wishlist-register-banner]');
+    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
   }
-
-  const render = () => {
-    const ui = getWishlistUiText();
-    banner.innerHTML = '';
-    const title = document.createElement('strong');
-    title.textContent = ui.registerBannerTitle;
-    const text = document.createElement('p');
-    text.style.cssText = 'margin:0;opacity:0.9;line-height:1.45;font-size:0.92rem;';
-    text.textContent = ui.registerBannerText;
-    banner.appendChild(title);
-    banner.appendChild(text);
-
-    if (siteConfig && siteConfig.wishlist_bot_url) {
-      const link = document.createElement('a');
-      link.className = 'button button--secondary button-outline secondary';
-      link.style.cssText = 'justify-self:start;';
-      link.href = siteConfig.wishlist_bot_url;
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      link.setAttribute('data-wishlist-bot-link', '');
-      link.textContent = ui.telegramBtn;
-      banner.appendChild(link);
-    }
-  };
-
-  render();
-  if (!banner.__vpnWishlistLangBound) {
-    banner.__vpnWishlistLangBound = true;
-    document.addEventListener('languagechange', () => {
-      if (banner.isConnected) render();
-    });
-  }
-  return banner;
+  return null;
 }
 
 function mountAccountWaitlistCard(anchorEl, siteConfig, options = {}) {
@@ -2705,12 +3214,9 @@ function mountAccountWaitlistCard(anchorEl, siteConfig, options = {}) {
   }
 
   const render = () => {
-    const ui = getWishlistUiText();
+    const lang = getCurrentSiteLanguage();
+    const ui = getWishlistUiText(lang);
     card.innerHTML = '';
-    const badge = document.createElement('span');
-    badge.style.cssText = 'justify-self:start;font-size:0.75rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;padding:3px 10px;border:1px solid currentColor;border-radius:999px;opacity:0.85;';
-    badge.textContent = ui.badge;
-    card.appendChild(badge);
 
     const h = document.createElement('h2');
     h.style.cssText = 'margin:0;font-size:1.35rem;';
@@ -2722,15 +3228,24 @@ function mountAccountWaitlistCard(anchorEl, siteConfig, options = {}) {
     p.textContent = ui.accountWaitlistText;
     card.appendChild(p);
 
-    if (siteConfig && siteConfig.wishlist_bot_url) {
+    const botUrl = buildWishlistBotUrl(siteConfig, { language: lang });
+    if (botUrl) {
       const link = document.createElement('a');
       link.className = 'button';
       link.style.cssText = 'justify-self:start;';
-      link.href = siteConfig.wishlist_bot_url;
+      link.href = botUrl;
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
       link.setAttribute('data-wishlist-bot-link', '');
       link.textContent = ui.telegramBtn;
+      link.addEventListener('click', () => {
+        trackWishlistBotClick({
+          brand: siteConfig && siteConfig.site_id,
+          planCode: null,
+          language: getCurrentSiteLanguage(),
+          botUrl: link.href,
+        });
+      });
       card.appendChild(link);
     }
   };
@@ -2743,6 +3258,906 @@ function mountAccountWaitlistCard(anchorEl, siteConfig, options = {}) {
     });
   }
   return card;
+}
+
+function mountSelectedPlanBanner(anchorForm, planInfo = {}, lang) {
+  if (typeof document === 'undefined' || !anchorForm || !planInfo || (!planInfo.name && !planInfo.plan_code)) return null;
+  let badge = document.querySelector('[data-selected-plan-banner]');
+  if (!badge) {
+    badge = document.createElement('div');
+    badge.setAttribute('data-selected-plan-banner', '');
+    badge.setAttribute('data-portal-status', '');
+    badge.setAttribute('data-status-type', 'info');
+    badge.setAttribute('role', 'status');
+    badge.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;margin-bottom:16px;border:1px solid currentColor;border-radius:12px;font-weight:600;';
+    if (anchorForm.parentNode) {
+      anchorForm.parentNode.insertBefore(badge, anchorForm);
+    }
+  }
+
+  const render = () => {
+    const ui = getWishlistUiText(lang);
+    const planName = planInfo.name || planInfo.plan_code || '';
+    const priceText = planInfo.priceText || (planInfo.price_minor !== undefined && planInfo.price_minor !== null ? `€${(Number(planInfo.price_minor) / 100).toFixed(Number(planInfo.price_minor) % 100 === 0 ? 0 : 2)}` : '');
+    const tpl = ui.selectedPlanBadge || 'Selected plan: {plan} — {price}';
+    badge.textContent = priceText
+      ? tpl.replace('{plan}', planName).replace('{price}', priceText)
+      : `${ui.selectedPlanLabel}: ${planName}`;
+  };
+
+  render();
+  if (!badge.__vpnPlanBannerLangBound) {
+    badge.__vpnPlanBannerLangBound = true;
+    document.addEventListener('languagechange', () => {
+      if (badge.isConnected) render();
+    });
+  }
+  return badge;
+}
+
+// ─── TASK-023: Local VPN QR Code, Subscription URL, VLESS URI & 3-step Connect Guide ───
+
+const VPN_CONNECT_UI_I18N = {
+  en: {
+    title: 'Connect to VPN',
+    subtitle: 'Scan the QR code or copy the connection link into your VPN app.',
+    modeSubscription: 'Subscription (all servers)',
+    modeVless: 'Direct VLESS link',
+    serverBadge: 'Server',
+    backToSub: 'All servers',
+    subLabel: 'Subscription URL',
+    vlessLabel: 'Direct VLESS link',
+    copySub: 'Copy link',
+    copyVless: 'Copy VLESS',
+    qrBtn: 'QR',
+    show: 'Show',
+    hide: 'Hide',
+    copiedSub: 'Subscription link copied.',
+    copiedVless: 'VLESS link copied.',
+    copyFailed: 'Could not copy link. Copy it manually.',
+    qrSelected: 'QR code switched to {name}.',
+    qrAria: 'VPN connection QR code',
+    guideTitle: 'How to connect in 30 seconds',
+    platforms: {
+      android: { label: 'Android', steps: ['Install Hiddify or v2rayNG from Google Play.', 'Tap "+" -> "Scan QR" (or paste the copied Subscription / VLESS link).', 'Select the added profile and tap Connect.'] },
+      ios: { label: 'iOS', steps: ['Install Streisand or Hiddify from the App Store.', 'Tap "+" -> "Scan QR" (or import the copied Subscription / VLESS link).', 'Allow VPN configuration in iOS and tap Connect.'] },
+      windows: { label: 'Windows', steps: ['Install Hiddify or v2rayN for Windows.', 'Copy the Subscription or VLESS link above and import from clipboard.', 'Enable TUN / system proxy mode and click Connect.'] },
+      macos: { label: 'macOS', steps: ['Install Hiddify or Streisand on macOS.', 'Import the copied Subscription / VLESS link or scan the QR code.', 'Approve the macOS VPN profile and click Connect.'] },
+    },
+  },
+  ru: {
+    title: 'Подключение к VPN',
+    subtitle: 'Отсканируйте QR-код или скопируйте ссылку в VPN-приложение.',
+    modeSubscription: 'Подписка (все серверы)',
+    modeVless: 'Прямая ссылка VLESS',
+    serverBadge: 'Сервер',
+    backToSub: 'Все серверы',
+    subLabel: 'Ссылка подписки',
+    vlessLabel: 'Прямая ссылка VLESS',
+    copySub: 'Скопировать ссылку',
+    copyVless: 'Скопировать VLESS',
+    qrBtn: 'QR',
+    show: 'Показать',
+    hide: 'Скрыть',
+    copiedSub: 'Ссылка подписки скопирована.',
+    copiedVless: 'Ссылка VLESS скопирована.',
+    copyFailed: 'Не удалось скопировать ссылку. Скопируйте вручную.',
+    qrSelected: 'QR-код переключён на {name}.',
+    qrAria: 'QR-код подключения к VPN',
+    guideTitle: 'Как подключиться за 30 секунд',
+    platforms: {
+      android: { label: 'Android', steps: ['Установите Hiddify или v2rayNG из Google Play.', 'Нажмите «+» -> «Сканировать QR» (или вставьте скопированную ссылку подписки / VLESS).', 'Выберите добавленный профиль и нажмите «Подключиться».'] },
+      ios: { label: 'iOS', steps: ['Установите Streisand или Hiddify из App Store.', 'Нажмите «+» -> «Сканировать QR» (или импортируйте ссылку из буфера).', 'Разрешите VPN-профиль в iOS и нажмите «Подключиться».'] },
+      windows: { label: 'Windows', steps: ['Установите Hiddify или v2rayN для Windows.', 'Скопируйте ссылку подписки или VLESS выше и импортируйте из буфера.', 'Включите режим TUN / системный прокси и нажмите «Подключиться».'] },
+      macos: { label: 'macOS', steps: ['Установите Hiddify или Streisand для macOS.', 'Импортируйте ссылку подписки / VLESS или отсканируйте QR-код.', 'Подтвердите VPN-профиль в macOS и нажмите «Подключиться».'] },
+    },
+  },
+  pl: {
+    title: 'Połącz z VPN',
+    subtitle: 'Zeskanuj kod QR lub skopiuj link do aplikacji VPN.',
+    modeSubscription: 'Subskrypcja (wszystkie serwery)',
+    modeVless: 'Bezpośredni link VLESS',
+    serverBadge: 'Serwer',
+    backToSub: 'Wszystkie serwery',
+    subLabel: 'Link subskrypcji',
+    vlessLabel: 'Bezpośredni link VLESS',
+    copySub: 'Kopiuj link',
+    copyVless: 'Kopiuj VLESS',
+    qrBtn: 'QR',
+    show: 'Pokaż',
+    hide: 'Ukryj',
+    copiedSub: 'Skopiowano link subskrypcji.',
+    copiedVless: 'Skopiowano link VLESS.',
+    copyFailed: 'Nie udało się skopiować linku.',
+    qrSelected: 'Kod QR przełączono na {name}.',
+    qrAria: 'Kod QR połączenia VPN',
+    guideTitle: 'Jak połączyć się w 30 sekund',
+    platforms: {
+      android: { label: 'Android', steps: ['Zainstaluj Hiddify lub v2rayNG z Google Play.', 'Kliknij "+" -> "Skanuj QR" lub wklej skopiowany link subskrypcji / VLESS.', 'Wybierz dodany profil i kliknij Połącz.'] },
+      ios: { label: 'iOS', steps: ['Zainstaluj Streisand lub Hiddify z App Store.', 'Kliknij "+" -> "Skanuj QR" lub zaimportuj link ze schowka.', 'Zezwól na konfigurację VPN w iOS i kliknij Połącz.'] },
+      windows: { label: 'Windows', steps: ['Zainstaluj Hiddify lub v2rayN na Windows.', 'Skopiuj link subskrypcji lub VLESS powyżej i zaimportuj ze schowka.', 'Włącz tryb TUN / proxy systemowe i kliknij Połącz.'] },
+      macos: { label: 'macOS', steps: ['Zainstaluj Hiddify lub Streisand na macOS.', 'Zaimportuj skopiowany link subskrypcji / VLESS lub zeskanuj kod QR.', 'Zatwierdź profil VPN w macOS i kliknij Połącz.'] },
+    },
+  },
+  uk: {
+    title: 'Підключення до VPN',
+    subtitle: 'Відскануйте QR-код або скопіюйте посилання у VPN-застосунок.',
+    modeSubscription: 'Підписка (усі сервери)',
+    modeVless: 'Пряме посилання VLESS',
+    serverBadge: 'Сервер',
+    backToSub: 'Усі сервери',
+    subLabel: 'Посилання підписки',
+    vlessLabel: 'Пряме посилання VLESS',
+    copySub: 'Скопіювати посилання',
+    copyVless: 'Скопіювати VLESS',
+    qrBtn: 'QR',
+    show: 'Показати',
+    hide: 'Сховати',
+    copiedSub: 'Посилання підписки скопійовано.',
+    copiedVless: 'Посилання VLESS скопійовано.',
+    copyFailed: 'Не вдалося скопіювати посилання.',
+    qrSelected: 'QR-код перемкнено на {name}.',
+    qrAria: 'QR-код підключення VPN',
+    guideTitle: 'Як підключитися за 30 секунд',
+    platforms: {
+      android: { label: 'Android', steps: ['Встановіть Hiddify або v2rayNG з Google Play.', 'Натисніть «+» -> «Сканувати QR» або вставте посилання підписки / VLESS.', 'Оберіть доданий профіль і натисніть «Підключитися».'] },
+      ios: { label: 'iOS', steps: ['Встановіть Streisand або Hiddify з App Store.', 'Натисніть «+» -> «Сканувати QR» або імпортуйте посилання з буфера.', 'Дозвольте VPN-конфігурацію в iOS і натисніть «Підключитися».'] },
+      windows: { label: 'Windows', steps: ['Встановіть Hiddify або v2rayN для Windows.', 'Скопіюйте посилання підписки або VLESS вище та імпортуйте з буфера.', 'Увімкніть режим TUN / системний проксі та натисніть «Підключитися».'] },
+      macos: { label: 'macOS', steps: ['Встановіть Hiddify або Streisand для macOS.', 'Імпортуйте посилання підписки / VLESS або відскануйте QR-код.', 'Підтвердіть VPN-профіль у macOS і натисніть «Підключитися».'] },
+    },
+  },
+  lt: {
+    title: 'Prisijungti prie VPN',
+    subtitle: 'Nuskaitykite QR kodą arba nukopijuokite nuorodą į VPN programėlę.',
+    modeSubscription: 'Prenumerata (visi serveriai)',
+    modeVless: 'Tiesioginė VLESS nuoroda',
+    serverBadge: 'Serveris',
+    backToSub: 'Visi serveriai',
+    subLabel: 'Prenumeratos URL',
+    vlessLabel: 'Tiesioginė VLESS nuoroda',
+    copySub: 'Kopijuoti nuorodą',
+    copyVless: 'Kopijuoti VLESS',
+    qrBtn: 'QR',
+    show: 'Rodyti',
+    hide: 'Slėpti',
+    copiedSub: 'Prenumeratos nuoroda nukopijuota.',
+    copiedVless: 'VLESS nuoroda nukopijuota.',
+    copyFailed: 'Nepavyko nukopijuoti nuorodos.',
+    qrSelected: 'QR kodas perjungtas į {name}.',
+    qrAria: 'VPN prisijungimo QR kodas',
+    guideTitle: 'Kaip prisijungti per 30 sekundžių',
+    platforms: {
+      android: { label: 'Android', steps: ['Įdiekite Hiddify arba v2rayNG iš Google Play.', 'Paspauskite "+" -> "Nuskaityti QR" arba įklijuokite nukopijuotą nuorodą.', 'Pasirinkite profilį ir spauskite Prisijungti.'] },
+      ios: { label: 'iOS', steps: ['Įdiekite Streisand arba Hiddify iš App Store.', 'Paspauskite "+" -> "Nuskaityti QR" arba importuokite nuorodą iš iškarpinės.', 'Leiskite VPN konfigūraciją iOS ir spauskite Prisijungti.'] },
+      windows: { label: 'Windows', steps: ['Įdiekite Hiddify arba v2rayN sistemai Windows.', 'Nukopijuokite prenumeratos arba VLESS nuorodą ir importuokite iš iškarpinės.', 'Įjunkite TUN / sistemos tarpinį serverį ir spauskite Prisijungti.'] },
+      macos: { label: 'macOS', steps: ['Įdiekite Hiddify arba Streisand sistemai macOS.', 'Importuokite prenumeratos / VLESS nuorodą arba nuskaitykite QR kodą.', 'Patvirtinkite VPN profilį macOS ir spauskite Prisijungti.'] },
+    },
+  },
+  tr: {
+    title: 'VPN Bağlantısı',
+    subtitle: 'QR kodunu tarayın veya bağlantıyı VPN uygulamanıza kopyalayın.',
+    modeSubscription: 'Abonelik (tüm sunucular)',
+    modeVless: 'Doğrudan VLESS bağlantısı',
+    serverBadge: 'Sunucu',
+    backToSub: 'Tüm sunucular',
+    subLabel: 'Abonelik URL',
+    vlessLabel: 'Doğrudan VLESS bağlantısı',
+    copySub: 'Bağlantıyı kopyala',
+    copyVless: 'VLESS kopyala',
+    qrBtn: 'QR',
+    show: 'Göster',
+    hide: 'Gizle',
+    copiedSub: 'Abonelik bağlantısı kopyalandı.',
+    copiedVless: 'VLESS bağlantısı kopyalandı.',
+    copyFailed: 'Bağlantı kopyalanamadı.',
+    qrSelected: 'QR kodu {name} için güncellendi.',
+    qrAria: 'VPN bağlantı QR kodu',
+    guideTitle: '30 saniyede nasıl bağlanılır',
+    platforms: {
+      android: { label: 'Android', steps: ['Google Play üzerinden Hiddify veya v2rayNG yükleyin.', '"+" -> "QR Tara" seçeneğine dokunun veya bağlantıyı yapıştırın.', 'Eklenen profili seçin ve Bağlan düğmesine dokunun.'] },
+      ios: { label: 'iOS', steps: ['App Store üzerinden Streisand veya Hiddify yükleyin.', '"+" -> "QR Tara" seçeneğine dokunun veya panodan içe aktarın.', 'iOS VPN yapılandırmasına izin verin ve Bağlan düğmesine dokunun.'] },
+      windows: { label: 'Windows', steps: ['Windows için Hiddify veya v2rayN yükleyin.', 'Yukarıdaki abonelik veya VLESS bağlantısını kopyalayıp panodan içe aktarın.', 'TUN / sistem proxy modunu açın ve Bağlan düğmesine tıklayın.'] },
+      macos: { label: 'macOS', steps: ['macOS için Hiddify veya Streisand yükleyin.', 'Abonelik / VLESS bağlantısını içe aktarın veya QR kodunu tarayın.', 'macOS VPN profilini onaylayın ve Bağlan düğmesine tıklayın.'] },
+    },
+  },
+  ro: {
+    title: 'Conectare la VPN',
+    subtitle: 'Scanează codul QR sau copiază linkul în aplicația ta VPN.',
+    modeSubscription: 'Abonament (toate serverele)',
+    modeVless: 'Link direct VLESS',
+    serverBadge: 'Server',
+    backToSub: 'Toate serverele',
+    subLabel: 'URL abonament',
+    vlessLabel: 'Link direct VLESS',
+    copySub: 'Copiază linkul',
+    copyVless: 'Copiază VLESS',
+    qrBtn: 'QR',
+    show: 'Arată',
+    hide: 'Ascunde',
+    copiedSub: 'Linkul abonamentului a fost copiat.',
+    copiedVless: 'Linkul VLESS a fost copiat.',
+    copyFailed: 'Nu s-a putut copia linkul.',
+    qrSelected: 'Codul QR a fost schimbat pe {name}.',
+    qrAria: 'Cod QR conectare VPN',
+    guideTitle: 'Cum te conectezi în 30 de secunde',
+    platforms: {
+      android: { label: 'Android', steps: ['Instalează Hiddify sau v2rayNG din Google Play.', 'Apasă "+" -> "Scanează QR" sau lipește linkul de abonament / VLESS.', 'Selectează profilul adăugat și apasă Conectare.'] },
+      ios: { label: 'iOS', steps: ['Instalează Streisand sau Hiddify din App Store.', 'Apasă "+" -> "Scanează QR" sau importă linkul din clipboard.', 'Permite configurarea VPN în iOS și apasă Conectare.'] },
+      windows: { label: 'Windows', steps: ['Instalează Hiddify sau v2rayN pentru Windows.', 'Copiază linkul de abonament sau VLESS de mai sus și importă-l din clipboard.', 'Activează modul TUN / proxy de sistem și apasă Conectare.'] },
+      macos: { label: 'macOS', steps: ['Instalează Hiddify sau Streisand pentru macOS.', 'Importă linkul de abonament / VLESS sau scanează codul QR.', 'Aprobă profilul VPN în macOS și apasă Conectare.'] },
+    },
+  },
+  de: {
+    title: 'Mit VPN verbinden',
+    subtitle: 'Scannen Sie den QR-Code oder kopieren Sie den Link in Ihre VPN-App.',
+    modeSubscription: 'Abo-Link (alle Server)',
+    modeVless: 'Direkter VLESS-Link',
+    serverBadge: 'Server',
+    backToSub: 'Alle Server',
+    subLabel: 'Abonnement-URL',
+    vlessLabel: 'Direkter VLESS-Link',
+    copySub: 'Link kopieren',
+    copyVless: 'VLESS kopieren',
+    qrBtn: 'QR',
+    show: 'Anzeigen',
+    hide: 'Ausblenden',
+    copiedSub: 'Abonnement-Link kopiert.',
+    copiedVless: 'VLESS-Link kopiert.',
+    copyFailed: 'Link konnte nicht kopiert werden.',
+    qrSelected: 'QR-Code auf {name} umgestellt.',
+    qrAria: 'VPN-Verbindungs-QR-Code',
+    guideTitle: 'In 30 Sekunden verbinden',
+    platforms: {
+      android: { label: 'Android', steps: ['Installieren Sie Hiddify oder v2rayNG aus Google Play.', 'Tippen Sie auf "+" -> "QR scannen" oder fügen Sie den kopierten Link ein.', 'Wählen Sie das Profil aus und tippen Sie auf Verbinden.'] },
+      ios: { label: 'iOS', steps: ['Installieren Sie Streisand oder Hiddify aus dem App Store.', 'Tippen Sie auf "+" -> "QR scannen" oder importieren Sie aus der Zwischenablage.', 'Erlauben Sie die VPN-Konfiguration in iOS und tippen Sie auf Verbinden.'] },
+      windows: { label: 'Windows', steps: ['Installieren Sie Hiddify oder v2rayN für Windows.', 'Kopieren Sie den Abo- oder VLESS-Link oben und importieren Sie ihn aus der Zwischenablage.', 'Aktivieren Sie den TUN-Modus / System-Proxy und klicken Sie auf Verbinden.'] },
+      macos: { label: 'macOS', steps: ['Installieren Sie Hiddify oder Streisand für macOS.', 'Importieren Sie den Abo- / VLESS-Link oder scannen Sie den QR-Code.', 'Bestätigen Sie das VPN-Profil unter macOS und klicken Sie auf Verbinden.'] },
+    },
+  },
+  sk: {
+    title: 'Pripojiť sa k VPN',
+    subtitle: 'Naskenujte QR kód alebo skopírujte odkaz do svojej VPN aplikácie.',
+    modeSubscription: 'Predplatné (všetky servery)',
+    modeVless: 'Priamy VLESS odkaz',
+    serverBadge: 'Server',
+    backToSub: 'Všetky servery',
+    subLabel: 'URL predplatného',
+    vlessLabel: 'Priamy VLESS odkaz',
+    copySub: 'Kopírovať odkaz',
+    copyVless: 'Kopírovať VLESS',
+    qrBtn: 'QR',
+    show: 'Zobraziť',
+    hide: 'Skryť',
+    copiedSub: 'Odkaz predplatného bol skopírovaný.',
+    copiedVless: 'VLESS odkaz bol skopírovaný.',
+    copyFailed: 'Odkaz sa nepodarilo skopírovať.',
+    qrSelected: 'QR kód prepnutý na {name}.',
+    qrAria: 'QR kód pripojenia VPN',
+    guideTitle: 'Ako sa pripojiť za 30 sekúnd',
+    platforms: {
+      android: { label: 'Android', steps: ['Nainštalujte Hiddify alebo v2rayNG z Google Play.', 'Ťuknite na "+" -> "Skenovať QR" alebo vložte odkaz predplatného / VLESS.', 'Vyberte pridaný profil a ťuknite na Pripojiť.'] },
+      ios: { label: 'iOS', steps: ['Nainštalujte Streisand alebo Hiddify z App Store.', 'Ťuknite na "+" -> "Skenovať QR" alebo importujte odkaz zo schránky.', 'Povoľte konfiguráciu VPN v iOS a ťuknite na Pripojiť.'] },
+      windows: { label: 'Windows', steps: ['Nainštalujte Hiddify alebo v2rayN pre Windows.', 'Skopírujte odkaz predplatného alebo VLESS vyššie a importujte zo schránky.', 'Zapnite režim TUN / systémový proxy a kliknite na Pripojiť.'] },
+      macos: { label: 'macOS', steps: ['Nainštalujte Hiddify alebo Streisand pre macOS.', 'Importujte odkaz predplatného / VLESS alebo naskenujte QR kód.', 'Schváľte VPN profil v macOS a kliknite na Pripojiť.'] },
+    },
+  },
+  hr: {
+    title: 'Poveži se na VPN',
+    subtitle: 'Skenirajte QR kod ili kopirajte poveznicu u svoju VPN aplikaciju.',
+    modeSubscription: 'Pretplata (svi poslužitelji)',
+    modeVless: 'Izravna VLESS poveznica',
+    serverBadge: 'Poslužitelj',
+    backToSub: 'Svi poslužitelji',
+    subLabel: 'URL pretplate',
+    vlessLabel: 'Izravna VLESS poveznica',
+    copySub: 'Kopiraj poveznicu',
+    copyVless: 'Kopiraj VLESS',
+    qrBtn: 'QR',
+    show: 'Prikaži',
+    hide: 'Sakrij',
+    copiedSub: 'Poveznica pretplate je kopirana.',
+    copiedVless: 'VLESS poveznica je kopirana.',
+    copyFailed: 'Kopiranje poveznice nije uspjelo.',
+    qrSelected: 'QR kod prebačen na {name}.',
+    qrAria: 'QR kod za VPN povezivanje',
+    guideTitle: 'Kako se povezati za 30 sekundi',
+    platforms: {
+      android: { label: 'Android', steps: ['Instalirajte Hiddify ili v2rayNG s Google Playa.', 'Dodirnite "+" -> "Skeniraj QR" ili zalijepite poveznicu pretplate / VLESS.', 'Odaberite dodani profil i dodirnite Poveži.'] },
+      ios: { label: 'iOS', steps: ['Instalirajte Streisand ili Hiddify iz App Storea.', 'Dodirnite "+" -> "Skeniraj QR" ili uvezite poveznicu iz međuspremnika.', 'Dopustite VPN konfiguraciju na iOS-u i dodirnite Poveži.'] },
+      windows: { label: 'Windows', steps: ['Instalirajte Hiddify ili v2rayN za Windows.', 'Kopirajte poveznicu pretplate ili VLESS iznad i uvezite iz međuspremnika.', 'Uključite TUN način rada / proxy sustava i kliknite Poveži.'] },
+      macos: { label: 'macOS', steps: ['Instalirajte Hiddify ili Streisand za macOS.', 'Uvezite poveznicu pretplate / VLESS ili skenirajte QR kod.', 'Odobrite VPN profil u macOS-u i kliknite Poveži.'] },
+    },
+  },
+  sr: {
+    title: 'Poveži se na VPN',
+    subtitle: 'Skenirajte QR kod ili kopirajte link u svoju VPN aplikaciju.',
+    modeSubscription: 'Pretplata (svi serveri)',
+    modeVless: 'Direktan VLESS link',
+    serverBadge: 'Server',
+    backToSub: 'Svi serveri',
+    subLabel: 'URL pretplate',
+    vlessLabel: 'Direktan VLESS link',
+    copySub: 'Kopiraj link',
+    copyVless: 'Kopiraj VLESS',
+    qrBtn: 'QR',
+    show: 'Prikaži',
+    hide: 'Sakrij',
+    copiedSub: 'Link pretplate je kopiran.',
+    copiedVless: 'VLESS link je kopiran.',
+    copyFailed: 'Kopiranje linka nije uspelo.',
+    qrSelected: 'QR kod prebačen na {name}.',
+    qrAria: 'QR kod za VPN povezivanje',
+    guideTitle: 'Kako se povezati za 30 sekundi',
+    platforms: {
+      android: { label: 'Android', steps: ['Instalirajte Hiddify ili v2rayNG sa Google Play prodavnice.', 'Dodirnite "+" -> "Skeniraj QR" ili nalepite link pretplate / VLESS.', 'Izaberite dodati profil i dodirnite Poveži.'] },
+      ios: { label: 'iOS', steps: ['Instalirajte Streisand ili Hiddify iz App Store prodavnice.', 'Dodirnite "+" -> "Skeniraj QR" ili uvezite link iz privremene memorije.', 'Dozvolite VPN konfiguraciju u iOS-u i dodirnite Poveži.'] },
+      windows: { label: 'Windows', steps: ['Instalirajte Hiddify ili v2rayN za Windows.', 'Kopirajte link pretplate ili VLESS iznad i uvezite iz privremene memorije.', 'Uključite TUN režim / sistemski proksi i kliknite Poveži.'] },
+      macos: { label: 'macOS', steps: ['Instalirajte Hiddify ili Streisand za macOS.', 'Uvezite link pretplate / VLESS ili skenirajte QR kod.', 'Odobrite VPN profil u macOS-u i kliknite Poveži.'] },
+    },
+  },
+  bg: {
+    title: 'Свързване с VPN',
+    subtitle: 'Сканирайте QR кода или копирайте връзката във вашето VPN приложение.',
+    modeSubscription: 'Абонамент (всички сървъри)',
+    modeVless: 'Директна VLESS връзка',
+    serverBadge: 'Сървър',
+    backToSub: 'Всички сървъри',
+    subLabel: 'URL на абонамента',
+    vlessLabel: 'Директна VLESS връзка',
+    copySub: 'Копирай връзката',
+    copyVless: 'Копирай VLESS',
+    qrBtn: 'QR',
+    show: 'Покажи',
+    hide: 'Скрий',
+    copiedSub: 'Връзката за абонамент е копирана.',
+    copiedVless: 'VLESS връзката е копирана.',
+    copyFailed: 'Неуспешно копиране на връзката.',
+    qrSelected: 'QR кодът е превключен на {name}.',
+    qrAria: 'QR код за VPN свързване',
+    guideTitle: 'Как да се свържете за 30 секунди',
+    platforms: {
+      android: { label: 'Android', steps: ['Инсталирайте Hiddify или v2rayNG от Google Play.', 'Натиснете "+" -> "Сканирай QR" или поставете връзката за абонамент / VLESS.', 'Изберете добавения профил и натиснете Свържи.'] },
+      ios: { label: 'iOS', steps: ['Инсталирайте Streisand или Hiddify от App Store.', 'Натиснете "+" -> "Сканирай QR" или импортирайте връзката от клипборда.', 'Разрешете VPN конфигурацията в iOS и натиснете Свържи.'] },
+      windows: { label: 'Windows', steps: ['Инсталирайте Hiddify или v2rayN за Windows.', 'Копирайте връзката за абонамент или VLESS по-горе и импортирайте от клипборда.', 'Включете TUN режим / системен прокси и натиснете Свържи.'] },
+      macos: { label: 'macOS', steps: ['Инсталирайте Hiddify или Streisand за macOS.', 'Импортирайте връзката за абонамент / VLESS или сканирайте QR кода.', 'Одобрете VPN профила в macOS и натиснете Свържи.'] },
+    },
+  },
+  hu: {
+    title: 'Csatlakozás VPN-hez',
+    subtitle: 'Olvasd be a QR-kódot, vagy másold be a linket a VPN alkalmazásba.',
+    modeSubscription: 'Előfizetés (összes szerver)',
+    modeVless: 'Közvetlen VLESS link',
+    serverBadge: 'Szerver',
+    backToSub: 'Összes szerver',
+    subLabel: 'Előfizetési URL',
+    vlessLabel: 'Közvetlen VLESS link',
+    copySub: 'Link másolása',
+    copyVless: 'VLESS másolása',
+    qrBtn: 'QR',
+    show: 'Mutat',
+    hide: 'Elrejt',
+    copiedSub: 'Előfizetési link másolva.',
+    copiedVless: 'VLESS link másolva.',
+    copyFailed: 'A link másolása sikertelen.',
+    qrSelected: 'QR-kód átváltva erre: {name}.',
+    qrAria: 'VPN csatlakozási QR-kód',
+    guideTitle: 'Csatlakozás 30 másodperc alatt',
+    platforms: {
+      android: { label: 'Android', steps: ['Telepítsd a Hiddify vagy a v2rayNG alkalmazást a Google Play áruházból.', 'Koppints a "+" -> "QR beolvasása" gombra, vagy illeszd be a másolt linket.', 'Válaszd ki a hozzáadott profilt, majd koppints a Csatlakozás gombra.'] },
+      ios: { label: 'iOS', steps: ['Telepítsd a Streisand vagy a Hiddify alkalmazást az App Store-ból.', 'Koppints a "+" -> "QR beolvasása" gombra, vagy importáld a linket a vágólapról.', 'Engedélyezd a VPN konfigurációt iOS-en, majd koppints a Csatlakozás gombra.'] },
+      windows: { label: 'Windows', steps: ['Telepítsd a Hiddify vagy a v2rayN alkalmazást Windowsra.', 'Másold ki a fenti előfizetési vagy VLESS linket, és importáld a vágólapról.', 'Kapcsold be a TUN / rendszerproxy módot, majd kattints a Csatlakozás gombra.'] },
+      macos: { label: 'macOS', steps: ['Telepítsd a Hiddify vagy a Streisand alkalmazást macOS-re.', 'Importáld az előfizetési / VLESS linket, vagy olvasd be a QR-kódot.', 'Hagyd jóvá a macOS VPN profilt, majd kattints a Csatlakozás gombra.'] },
+    },
+  },
+};
+
+function getVpnConnectUiStrings(lang) {
+  const code = String(
+    lang
+    || (typeof document !== 'undefined' && document.documentElement && document.documentElement.lang)
+    || 'en'
+  ).slice(0, 2).toLowerCase();
+  return VPN_CONNECT_UI_I18N[code] || VPN_CONNECT_UI_I18N.en;
+}
+
+function maskConnectionUri(uri) {
+  const raw = String(uri || '').trim();
+  if (!raw) return '—';
+  if (raw.startsWith('vless://')) {
+    const atIdx = raw.indexOf('@');
+    const qIdx = raw.indexOf('?');
+    const hashIdx = raw.indexOf('#');
+    if (atIdx > 8) {
+      const uuidPart = raw.slice(8, atIdx);
+      const maskedUuid = uuidPart.length > 8
+        ? `${uuidPart.slice(0, 4)}••••${uuidPart.slice(-4)}`
+        : '••••••••';
+      const hostEnd = qIdx > atIdx ? qIdx : (hashIdx > atIdx ? hashIdx : raw.length);
+      const hostPart = raw.slice(atIdx + 1, hostEnd);
+      const tagPart = hashIdx > atIdx ? raw.slice(hashIdx) : '';
+      return `vless://${maskedUuid}@${hostPart}${qIdx > atIdx ? '?…' : ''}${tagPart}`;
+    }
+  }
+  if (raw.length <= 36) return raw;
+  const lastSlash = raw.lastIndexOf('/');
+  if (lastSlash > 8 && raw.length - lastSlash > 12) {
+    const prefix = raw.slice(0, lastSlash + 1);
+    const tail = raw.slice(lastSlash + 1);
+    return `${prefix}${tail.slice(0, 6)}••••${tail.slice(-4)}`;
+  }
+  return `${raw.slice(0, 24)}••••${raw.slice(-6)}`;
+}
+
+function renderQrCodeSvg(text, options = {}) {
+  const payload = String(text || '').trim();
+  if (!payload || typeof options.createQrMatrix !== 'function') return '';
+  let modules;
+  try {
+    const res = options.createQrMatrix(payload);
+    modules = res && res.modules ? res.modules : res;
+  } catch {
+    return '';
+  }
+  if (!modules || typeof modules.size !== 'number' || typeof modules.get !== 'function' || modules.size <= 0) {
+    return '';
+  }
+
+  const size = modules.size;
+  const margin = typeof options.margin === 'number' && options.margin >= 0 ? options.margin : 4;
+  const viewSize = size + margin * 2;
+  const displaySize = typeof options.size === 'number' && options.size > 0 ? options.size : 208;
+  const ariaLabel = String(options.ariaLabel || 'VPN QR Code')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  const pathParts = [];
+  for (let row = 0; row < size; row += 1) {
+    let col = 0;
+    while (col < size) {
+      if (modules.get(row, col)) {
+        const start = col;
+        while (col < size && modules.get(row, col)) {
+          col += 1;
+        }
+        const run = col - start;
+        pathParts.push(`M${start + margin} ${row + margin}h${run}v1h-${run}z`);
+      } else {
+        col += 1;
+      }
+    }
+  }
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${viewSize} ${viewSize}" width="${displaySize}" height="${displaySize}" role="img" aria-label="${ariaLabel}" shape-rendering="crispEdges" class="vpn-connect__qr-svg"><rect width="${viewSize}" height="${viewSize}" fill="#ffffff"/><path fill="#111111" d="${pathParts.join('')}"/></svg>`;
+}
+
+function hasVpnConnectionData(bootstrap) {
+  if (!bootstrap || typeof bootstrap !== 'object') return false;
+  const conn = bootstrap.connection && typeof bootstrap.connection === 'object' ? bootstrap.connection : null;
+  if (conn) {
+    if (typeof conn.subscription_url === 'string' && conn.subscription_url.trim()) return true;
+    if (typeof conn.primary_vless_uri === 'string' && conn.primary_vless_uri.trim()) return true;
+  }
+  if (Array.isArray(bootstrap.servers)) {
+    return bootstrap.servers.some((s) => s && typeof s.vless_uri === 'string' && s.vless_uri.trim());
+  }
+  return false;
+}
+
+function detectClientPlatform() {
+  if (typeof window === 'undefined' || !window.navigator) return 'android';
+  const ua = String(window.navigator.userAgent || '').toLowerCase();
+  if (/iphone|ipad|ipod/.test(ua)) return 'ios';
+  if (/android/.test(ua)) return 'android';
+  if (/mac os x|macintosh/.test(ua)) return 'macos';
+  if (/windows/.test(ua)) return 'windows';
+  return 'android';
+}
+
+function copyTextSafe(text) {
+  const value = String(text || '');
+  if (!value) return Promise.reject(new Error('Empty value'));
+  if (typeof window !== 'undefined' && window.navigator && window.navigator.clipboard && typeof window.navigator.clipboard.writeText === 'function') {
+    return window.navigator.clipboard.writeText(value);
+  }
+  if (typeof document !== 'undefined' && document.body && typeof document.execCommand === 'function') {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = value;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      ta.style.pointerEvents = 'none';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (ok) return Promise.resolve();
+    } catch {
+      // ignore fallback errors
+    }
+  }
+  return Promise.reject(new Error('Clipboard API unavailable'));
+}
+
+function mountVpnConnectPanel(anchorEl, bootstrap, options = {}) {
+  const removeExisting = () => {
+    if (!anchorEl) return;
+    const container = options.placement === 'inside' ? anchorEl : (anchorEl.parentNode || anchorEl);
+    const prev = container && container.querySelector ? container.querySelector('[data-vpn-connect-panel]') : null;
+    if (prev) {
+      prev.hidden = true;
+      prev.innerHTML = '';
+    }
+  };
+
+  if (typeof document === 'undefined' || !anchorEl || !hasVpnConnectionData(bootstrap)) {
+    removeExisting();
+    return {
+      hasConnection: false,
+      hide: removeExisting,
+      selectServerVless: () => {},
+      destroy: removeExisting,
+    };
+  }
+
+  const conn = (bootstrap.connection && typeof bootstrap.connection === 'object') ? bootstrap.connection : {};
+  const servers = Array.isArray(bootstrap.servers) ? bootstrap.servers : [];
+  const firstServerWithVless = servers.find((s) => s && typeof s.vless_uri === 'string' && s.vless_uri.trim()) || null;
+
+  const subUrl = typeof conn.subscription_url === 'string' ? conn.subscription_url.trim() : '';
+  const primaryVless = (typeof conn.primary_vless_uri === 'string' && conn.primary_vless_uri.trim())
+    ? conn.primary_vless_uri.trim()
+    : (firstServerWithVless ? firstServerWithVless.vless_uri.trim() : '');
+
+  const state = {
+    mode: subUrl ? 'subscription' : 'vless',
+    customServer: null,
+    revealed: false,
+    platform: detectClientPlatform(),
+    guideOpen: false,
+  };
+
+  const container = options.placement === 'inside' ? anchorEl : (anchorEl.parentNode || anchorEl);
+  let panel = container && container.querySelector ? container.querySelector('[data-vpn-connect-panel]') : null;
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.setAttribute('data-vpn-connect-panel', '');
+    if (options.placement === 'inside') {
+      anchorEl.appendChild(panel);
+    } else if (options.placement === 'prepend' && anchorEl.firstChild) {
+      anchorEl.insertBefore(panel, anchorEl.firstChild);
+    } else if (anchorEl.parentNode) {
+      anchorEl.parentNode.insertBefore(panel, anchorEl.nextSibling);
+    }
+  }
+  panel.className = ['vpn-connect', options.className || ''].filter(Boolean).join(' ');
+  panel.hidden = false;
+
+  const getActiveUri = () => {
+    if (state.mode === 'vless') {
+      if (state.customServer && state.customServer.vless_uri) {
+        return String(state.customServer.vless_uri).trim();
+      }
+      return primaryVless || subUrl;
+    }
+    return subUrl || primaryVless;
+  };
+
+  const render = () => {
+    const ui = getVpnConnectUiStrings(options.lang);
+    const activeUri = getActiveUri();
+    const isVless = state.mode === 'vless' || !subUrl;
+    const qrSvg = renderQrCodeSvg(activeUri, {
+      createQrMatrix: options.createQrMatrix,
+      ariaLabel: ui.qrAria,
+      size: 208,
+    });
+
+    panel.innerHTML = '';
+
+    const head = document.createElement('div');
+    head.className = 'vpn-connect__head';
+    const h3 = document.createElement('h3');
+    h3.className = 'vpn-connect__title';
+    h3.textContent = ui.title;
+    const subP = document.createElement('p');
+    subP.className = 'vpn-connect__subtitle';
+    subP.textContent = ui.subtitle;
+    head.appendChild(h3);
+    head.appendChild(subP);
+    panel.appendChild(head);
+
+    const localStatus = document.createElement('div');
+    localStatus.className = 'portal-status';
+    localStatus.setAttribute('data-vpn-connect-status', '');
+    localStatus.setAttribute('data-portal-status', '');
+    localStatus.setAttribute('role', 'status');
+    localStatus.setAttribute('aria-live', 'polite');
+    localStatus.hidden = true;
+    panel.appendChild(localStatus);
+
+    if (subUrl && (primaryVless || state.customServer)) {
+      const modeBar = document.createElement('div');
+      modeBar.className = 'vpn-connect__modes';
+      modeBar.setAttribute('role', 'group');
+
+      const subBtn = document.createElement('button');
+      subBtn.type = 'button';
+      subBtn.className = `vpn-connect__mode-btn${!isVless ? ' is-active' : ''}`;
+      subBtn.setAttribute('data-vpn-qr-mode', 'subscription');
+      subBtn.setAttribute('aria-pressed', String(!isVless));
+      subBtn.textContent = ui.modeSubscription;
+      subBtn.addEventListener('click', () => {
+        state.mode = 'subscription';
+        state.customServer = null;
+        state.revealed = false;
+        render();
+      });
+
+      const vlessBtn = document.createElement('button');
+      vlessBtn.type = 'button';
+      vlessBtn.className = `vpn-connect__mode-btn${isVless ? ' is-active' : ''}`;
+      vlessBtn.setAttribute('data-vpn-qr-mode', 'vless');
+      vlessBtn.setAttribute('aria-pressed', String(isVless));
+      vlessBtn.textContent = ui.modeVless;
+      vlessBtn.addEventListener('click', () => {
+        state.mode = 'vless';
+        state.revealed = false;
+        render();
+      });
+
+      modeBar.appendChild(subBtn);
+      modeBar.appendChild(vlessBtn);
+      panel.appendChild(modeBar);
+    }
+
+    if (isVless && state.customServer) {
+      const badge = document.createElement('div');
+      badge.className = 'vpn-connect__server-pill';
+      badge.setAttribute('data-vpn-selected-server', '');
+      const labelSpan = document.createElement('span');
+      labelSpan.textContent = `${ui.serverBadge}: ${formatServerLocation(state.customServer)}`;
+      badge.appendChild(labelSpan);
+      if (subUrl) {
+        const backBtn = document.createElement('button');
+        backBtn.type = 'button';
+        backBtn.className = 'vpn-connect__mini-btn';
+        backBtn.textContent = ui.backToSub;
+        backBtn.addEventListener('click', () => {
+          state.mode = 'subscription';
+          state.customServer = null;
+          state.revealed = false;
+          render();
+        });
+        badge.appendChild(backBtn);
+      }
+      panel.appendChild(badge);
+    }
+
+    const body = document.createElement('div');
+    body.className = 'vpn-connect__body';
+
+    if (qrSvg) {
+      const qrBox = document.createElement('div');
+      qrBox.className = 'vpn-connect__qr';
+      qrBox.setAttribute('data-vpn-qr-box', '');
+      qrBox.innerHTML = qrSvg;
+      body.appendChild(qrBox);
+    }
+
+    const detailsCol = document.createElement('div');
+    detailsCol.className = 'vpn-connect__controls';
+
+    const uriLabel = document.createElement('div');
+    uriLabel.className = 'vpn-connect__label';
+    uriLabel.textContent = isVless ? ui.vlessLabel : ui.subLabel;
+    detailsCol.appendChild(uriLabel);
+
+    const codeEl = document.createElement('code');
+    codeEl.className = 'vpn-connect__code';
+    codeEl.setAttribute('data-vpn-connect-uri', '');
+    codeEl.textContent = state.revealed ? activeUri : maskConnectionUri(activeUri);
+    detailsCol.appendChild(codeEl);
+
+    const actionsRow = document.createElement('div');
+    actionsRow.className = 'vpn-connect__actions';
+
+    const copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.className = 'vpn-connect__btn vpn-connect__btn--primary';
+    copyBtn.setAttribute('data-vpn-connect-copy', '');
+    copyBtn.textContent = isVless ? ui.copyVless : ui.copySub;
+    copyBtn.addEventListener('click', () => {
+      copyTextSafe(activeUri).then(() => {
+        setPortalStatus(localStatus, isVless ? ui.copiedVless : ui.copiedSub, 'success', { scroll: false });
+      }).catch(() => {
+        setPortalStatus(localStatus, ui.copyFailed, 'error', { scroll: false });
+      });
+    });
+
+    const revealBtn = document.createElement('button');
+    revealBtn.type = 'button';
+    revealBtn.className = 'vpn-connect__btn';
+    revealBtn.setAttribute('data-vpn-connect-reveal', '');
+    revealBtn.textContent = state.revealed ? ui.hide : ui.show;
+    revealBtn.addEventListener('click', () => {
+      state.revealed = !state.revealed;
+      codeEl.textContent = state.revealed ? activeUri : maskConnectionUri(activeUri);
+      revealBtn.textContent = state.revealed ? ui.hide : ui.show;
+    });
+
+    actionsRow.appendChild(copyBtn);
+    actionsRow.appendChild(revealBtn);
+
+    if (subUrl && primaryVless) {
+      const altBtn = document.createElement('button');
+      altBtn.type = 'button';
+      altBtn.className = 'vpn-connect__btn';
+      altBtn.setAttribute('data-vpn-copy-alt', '');
+      altBtn.textContent = isVless ? ui.copySub : ui.copyVless;
+      altBtn.addEventListener('click', () => {
+        const altVal = isVless ? subUrl : primaryVless;
+        copyTextSafe(altVal).then(() => {
+          setPortalStatus(localStatus, isVless ? ui.copiedSub : ui.copiedVless, 'success', { scroll: false });
+        }).catch(() => {
+          setPortalStatus(localStatus, ui.copyFailed, 'error', { scroll: false });
+        });
+      });
+      actionsRow.appendChild(altBtn);
+    }
+
+    detailsCol.appendChild(actionsRow);
+    body.appendChild(detailsCol);
+    panel.appendChild(body);
+
+    const guide = document.createElement('details');
+    guide.className = 'vpn-connect__guide';
+    guide.setAttribute('data-vpn-connect-guide', '');
+    if (state.guideOpen) guide.open = true;
+    guide.addEventListener('toggle', () => {
+      state.guideOpen = guide.open;
+    });
+
+    const summary = document.createElement('summary');
+    summary.className = 'vpn-connect__guide-summary';
+    summary.textContent = ui.guideTitle;
+    guide.appendChild(summary);
+
+    const tabsWrap = document.createElement('div');
+    tabsWrap.className = 'vpn-connect__os-tabs';
+    tabsWrap.setAttribute('role', 'tablist');
+
+    const stepsList = document.createElement('ol');
+    stepsList.className = 'vpn-connect__steps';
+
+    const renderSteps = () => {
+      const plat = (ui.platforms && ui.platforms[state.platform]) || ui.platforms.android;
+      stepsList.innerHTML = '';
+      (plat.steps || []).forEach((stepText) => {
+        const li = document.createElement('li');
+        li.textContent = stepText;
+        stepsList.appendChild(li);
+      });
+      tabsWrap.querySelectorAll('[data-vpn-os-tab]').forEach((b) => {
+        const active = b.getAttribute('data-vpn-os-tab') === state.platform;
+        b.setAttribute('aria-selected', String(active));
+        b.classList.toggle('is-active', active);
+      });
+    };
+
+    ['android', 'ios', 'windows', 'macos'].forEach((osKey) => {
+      const tabBtn = document.createElement('button');
+      tabBtn.type = 'button';
+      tabBtn.className = `vpn-connect__os-tab${state.platform === osKey ? ' is-active' : ''}`;
+      tabBtn.setAttribute('role', 'tab');
+      tabBtn.setAttribute('data-vpn-os-tab', osKey);
+      tabBtn.setAttribute('aria-selected', String(state.platform === osKey));
+      tabBtn.textContent = (ui.platforms && ui.platforms[osKey] && ui.platforms[osKey].label) || osKey;
+      tabBtn.addEventListener('click', () => {
+        state.platform = osKey;
+        renderSteps();
+      });
+      tabsWrap.appendChild(tabBtn);
+    });
+
+    renderSteps();
+    guide.appendChild(tabsWrap);
+    guide.appendChild(stepsList);
+    panel.appendChild(guide);
+  };
+
+  render();
+
+  if (!panel.__vpnConnectLangBound) {
+    panel.__vpnConnectLangBound = true;
+    document.addEventListener('languagechange', () => {
+      if (panel.isConnected && !panel.hidden && panel.__vpnConnectRender) {
+        panel.__vpnConnectRender();
+      }
+    });
+  }
+  panel.__vpnConnectRender = render;
+
+  return {
+    hasConnection: true,
+    element: panel,
+    selectServerVless: (server) => {
+      if (!server || typeof server.vless_uri !== 'string' || !server.vless_uri.trim()) return;
+      state.mode = 'vless';
+      state.customServer = server;
+      state.revealed = false;
+      render();
+      const ui = getVpnConnectUiStrings(options.lang);
+      const localStatus = panel.querySelector('[data-vpn-connect-status]');
+      const label = formatServerLocation(server) || server.code || 'VPN';
+      setPortalStatus(localStatus, ui.qrSelected.replace('{name}', label), 'info', { scroll: false });
+      try {
+        if (typeof panel.scrollIntoView === 'function') {
+          panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      } catch {
+        // ignore
+      }
+    },
+    hide: removeExisting,
+    destroy: removeExisting,
+  };
+}
+
+function appendServerVlessActions(cellEl, server, options = {}) {
+  if (typeof document === 'undefined' || !cellEl || !server) return null;
+  const vlessUri = typeof server.vless_uri === 'string' ? server.vless_uri.trim() : '';
+  if (!vlessUri) return null;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'vpn-server-actions';
+  wrap.setAttribute('data-server-vless-actions', '');
+
+  const copyBtn = document.createElement('button');
+  copyBtn.type = 'button';
+  copyBtn.className = 'vpn-connect__mini-btn';
+  copyBtn.setAttribute('data-server-copy-vless', '');
+
+  const qrBtn = document.createElement('button');
+  qrBtn.type = 'button';
+  qrBtn.className = 'vpn-connect__mini-btn vpn-connect__mini-btn--qr';
+  qrBtn.setAttribute('data-server-qr', '');
+
+  const syncLabels = () => {
+    const ui = getVpnConnectUiStrings(options.lang);
+    copyBtn.textContent = ui.copyVless;
+    qrBtn.textContent = ui.qrBtn;
+  };
+  syncLabels();
+
+  copyBtn.addEventListener('click', () => {
+    const ui = getVpnConnectUiStrings(options.lang);
+    copyTextSafe(vlessUri).then(() => {
+      if (options.statusEl) setPortalStatus(options.statusEl, ui.copiedVless, 'success', { scroll: false });
+    }).catch(() => {
+      if (options.statusEl) setPortalStatus(options.statusEl, ui.copyFailed, 'error', { scroll: false });
+    });
+  });
+
+  qrBtn.addEventListener('click', () => {
+    if (typeof options.onSelectQr === 'function') {
+      options.onSelectQr(server);
+    }
+  });
+
+  wrap.appendChild(copyBtn);
+  wrap.appendChild(qrBtn);
+  cellEl.appendChild(wrap);
+
+  if (!wrap.__vpnServerActLangBound) {
+    wrap.__vpnServerActLangBound = true;
+    document.addEventListener('languagechange', () => {
+      if (wrap.isConnected) syncLabels();
+    });
+  }
+  return wrap;
 }
 
 module.exports = {
@@ -2767,14 +4182,30 @@ module.exports = {
   formatPortalApiError,
   handleCheckoutResponse,
   initCheckoutReturnPolling,
+  guardGuestAuthPages,
   syncAccountNavLinks,
+  initAccountTabs,
+  savePlanSelectionHandoff,
+  consumePlanSelectionHandoff,
   revealAuthGate,
   getWishlistUiText,
   isSiteInWishlistMode,
   isSiteServersEnabled,
   isSiteCheckoutEnabled,
+  getCurrentSiteLanguage,
+  buildWishlistBotUrl,
+  trackWishlistBotClick,
+  openWishlistBot,
   renderWishlistCard,
   openWishlistModal,
   mountRegisterWishlistBanner,
   mountAccountWaitlistCard,
+  mountSelectedPlanBanner,
+  VPN_CONNECT_UI_I18N,
+  getVpnConnectUiStrings,
+  maskConnectionUri,
+  renderQrCodeSvg,
+  hasVpnConnectionData,
+  mountVpnConnectPanel,
+  appendServerVlessActions,
 };

@@ -1,85 +1,169 @@
-<section class="portal-section" data-portal-account>
+<section class="portal-section account-section" data-portal-account>
   <div class="container">
-    <div class="portal-card portal-card--wide">
-      <div class="account-block__head">
-        <div>
-          <p class="eyebrow">Nordel Personal Account</p>
-          <h1>Account Dashboard</h1>
-        </div>
-        <button class="button button--secondary" type="button" data-logout>Sign Out</button>
+    <div class="account-page-head">
+      <div>
+        <p class="eyebrow">Nordel Personal Account</p>
+        <h1>Account Dashboard</h1>
       </div>
-      <div class="portal-status" data-portal-status hidden role="status" aria-live="polite"></div>
+    </div>
 
-      <div class="account-grid">
-        <article class="account-block" id="profile">
-          <div class="account-block__head"><h2>1. Overview &amp; Profile</h2><span data-profile-email>—</span></div>
-          <form class="portal-form" data-profile-form novalidate>
-            <div class="portal-status" data-profile-status data-portal-status hidden role="status" aria-live="polite"></div>
-            <label class="portal-field"><span>Display Name</span><input type="text" name="display_name" required></label>
-            <button class="button button--secondary" type="submit">Save Profile</button>
-          </form>
-        </article>
-
-        <article class="account-block" id="subscription">
-          <div class="account-block__head"><h2>2. Subscription &amp; Plan</h2><strong data-sub-status>—</strong></div>
-          <p>Current plan: <strong data-sub-plan>—</strong> · Expires: <strong data-sub-expires>—</strong></p>
-          <p><a class="button" href="./index.html#pricing">Renew / Change Plan ↗</a></p>
-        </article>
-
-        <article class="account-block" id="vpn-access">
-          <div class="account-block__head"><h2>3. VPN Key &amp; Available Servers</h2></div>
-          <div class="portal-status" data-vpn-status data-portal-status hidden role="status" aria-live="polite"></div>
-          <div class="account-key-box">
-            <code data-vpn-key>••••••••••••</code>
-            <button class="button button--secondary" type="button" data-key-reveal>Show</button>
-            <button class="button button--secondary" type="button" data-key-copy>Copy</button>
+    <div class="account-layout">
+      <aside class="account-sidebar" aria-label="Account navigation">
+        <div class="account-sidebar__profile">
+          <div class="account-sidebar__avatar" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
           </div>
-          <div class="account-table-wrap">
-            <table class="account-table">
-              <thead><tr><th>Location</th><th>Status</th><th>Ping</th><th>Protocols</th></tr></thead>
-              <tbody data-servers-list><tr><td colspan="4">Loading servers...</td></tr></tbody>
-            </table>
+          <div class="account-sidebar__meta">
+            <span class="account-sidebar__label">Signed in as</span>
+            <strong class="account-sidebar__email" data-profile-email>—</strong>
           </div>
-        </article>
+        </div>
 
-        <article class="account-block" id="devices">
-          <div class="account-block__head"><h2>4. Connected Devices</h2><strong data-devices-count>0 / 5</strong></div>
-          <div class="portal-status" data-devices-status data-portal-status hidden role="status" aria-live="polite"></div>
-          <div class="account-progress"><div class="account-progress__bar" data-devices-bar style="width:0%"></div></div>
-          <div class="account-table-wrap">
-            <table class="account-table">
-              <thead><tr><th>Device</th><th>Platform</th><th>Last Active</th><th>Action</th></tr></thead>
-              <tbody data-devices-list><tr><td colspan="4">Loading devices...</td></tr></tbody>
-            </table>
+        <div class="account-sidebar__nav" role="tablist" aria-label="Account sections">
+          <button class="account-sidebar__link is-active" type="button" role="tab" id="tab-profile" aria-controls="panel-profile" aria-selected="true" tabindex="0" data-account-tab="profile" data-tab="profile">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
+            <span>Overview &amp; Profile</span>
+          </button>
+          <button class="account-sidebar__link" type="button" role="tab" id="tab-subscription" aria-controls="panel-subscription" aria-selected="false" tabindex="-1" data-account-tab="subscription" data-tab="subscription">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+            <span>Subscription</span>
+          </button>
+          <button class="account-sidebar__link" type="button" role="tab" id="tab-vpn-access" aria-controls="panel-vpn-access" aria-selected="false" tabindex="-1" data-account-tab="vpn-access" data-tab="vpn-access">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            <span>VPN &amp; Servers</span>
+          </button>
+          <button class="account-sidebar__link" type="button" role="tab" id="tab-devices" aria-controls="panel-devices" aria-selected="false" tabindex="-1" data-account-tab="devices" data-tab="devices">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            <span>Devices</span>
+          </button>
+          <button class="account-sidebar__link" type="button" role="tab" id="tab-billing" aria-controls="panel-billing" aria-selected="false" tabindex="-1" data-account-tab="billing" data-tab="billing" data-billing-ui hidden>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            <span>Billing</span>
+          </button>
+          <button class="account-sidebar__link" type="button" role="tab" id="tab-security" aria-controls="panel-security" aria-selected="false" tabindex="-1" data-account-tab="security" data-tab="security">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <span>Security &amp; Support</span>
+          </button>
+        </div>
+
+        <div class="account-sidebar__help">
+          <h3>Need help?</h3>
+          <p>Contact our support team or manage your account security.</p>
+          <button class="button button--secondary" type="button" data-open-tab="security">Contact Support</button>
+        </div>
+
+        <button class="button button--secondary account-sidebar__logout" type="button" data-logout>Sign Out</button>
+      </aside>
+
+      <div class="account-content">
+        <div class="portal-status" data-portal-status hidden role="status" aria-live="polite"></div>
+
+        <section role="tabpanel" id="panel-profile" aria-labelledby="tab-profile" data-account-panel="profile" data-panel="profile">
+          <div class="account-grid">
+            <article class="account-block" id="profile">
+              <div class="account-block__head"><h2>Overview &amp; Profile</h2><span data-profile-email>—</span></div>
+              <form class="portal-form" data-profile-form novalidate>
+                <div class="portal-status" data-profile-status data-portal-status hidden role="status" aria-live="polite"></div>
+                <label class="portal-field"><span>Display Name</span><input type="text" name="display_name" required></label>
+                <button class="button button--secondary" type="submit">Save Profile</button>
+              </form>
+            </article>
+
+            <article class="account-block">
+              <div class="account-block__head"><h2>Subscription Summary</h2><strong data-sub-status>—</strong></div>
+              <p>Current plan: <strong data-sub-plan>—</strong> · Expires: <strong data-sub-expires>—</strong></p>
+              <div style="display:flex;flex-wrap:wrap;gap:0.75rem;">
+                <a class="button" href="./index.html#pricing">Compare Plans ↗</a>
+                <button class="button button--secondary" type="button" data-open-tab="subscription">Manage Subscription</button>
+              </div>
+            </article>
           </div>
-        </article>
+        </section>
 
-        <article class="account-block" id="billing">
-          <div class="account-block__head"><h2>5. Billing History</h2></div>
-          <div class="account-table-wrap">
-            <table class="account-table">
-              <thead><tr><th>Date</th><th>Plan</th><th>Amount</th><th>Status</th></tr></thead>
-              <tbody data-billing-list><tr><td colspan="4">Loading payments...</td></tr></tbody>
-            </table>
-          </div>
-        </article>
+        <section role="tabpanel" id="panel-subscription" aria-labelledby="tab-subscription" data-account-panel="subscription" data-panel="subscription" hidden>
+          <article class="account-block" id="subscription">
+            <div class="account-block__head"><h2>Subscription &amp; Plan</h2><strong data-sub-status>—</strong></div>
+            <p>Current plan: <strong data-sub-plan>—</strong> · Expires: <strong data-sub-expires>—</strong></p>
+            <form class="portal-form" data-account-checkout-form hidden novalidate>
+              <div class="portal-status" data-account-checkout-status data-portal-status hidden role="status" aria-live="polite"></div>
+              <label class="portal-field">
+                <span>Selected Plan</span>
+                <select name="plan_code" data-account-plan-select>
+                  <option value="trial">Trial — €0.50</option>
+                  <option value="basic">Basic — €7</option>
+                  <option value="plus" selected>Plus — €25</option>
+                  <option value="complete">Complete — €55</option>
+                </select>
+              </label>
+              <div class="payment-providers" data-payment-providers></div>
+              <button class="button" type="submit">Continue to Payment</button>
+            </form>
+            <p><a class="button button--secondary" href="./index.html#pricing">Compare Plans ↗</a></p>
+          </article>
+        </section>
 
-        <article class="account-block" id="security">
-          <div class="account-block__head"><h2>6. Security &amp; Support</h2><button class="button button--secondary" type="button" data-logout-all>Revoke All Sessions</button></div>
-          <form class="portal-form" data-password-form novalidate>
-            <div class="portal-status" data-password-status data-portal-status hidden role="status" aria-live="polite"></div>
-            <label class="portal-field"><span>Current Password</span><input type="password" name="current_password" required></label>
-            <label class="portal-field"><span>New Password</span><input type="password" name="password" required minlength="8"></label>
-            <label class="portal-field"><span>Confirm New Password</span><input type="password" name="password_confirmation" required minlength="8"></label>
-            <button class="button button--secondary" type="submit">Update Password</button>
-          </form>
-          <form class="portal-form" data-support-form novalidate>
-            <div class="portal-status" data-support-status data-portal-status hidden role="status" aria-live="polite"></div>
-            <label class="portal-field"><span>Support Subject</span><input type="text" name="subject" required minlength="3"></label>
-            <label class="portal-field"><span>Message</span><textarea name="message" rows="3" required minlength="5"></textarea></label>
-            <button class="button" type="submit">Send Support Request</button>
-          </form>
-        </article>
+        <section role="tabpanel" id="panel-vpn-access" aria-labelledby="tab-vpn-access" data-account-panel="vpn-access" data-panel="vpn-access" hidden>
+          <article class="account-block" id="vpn-access">
+            <div class="account-block__head"><h2>VPN Key &amp; Available Servers</h2></div>
+            <div class="portal-status" data-vpn-status data-portal-status hidden role="status" aria-live="polite"></div>
+            <div class="account-key-box">
+              <code data-vpn-key>••••••••••••</code>
+              <button class="button button--secondary" type="button" data-key-reveal>Show</button>
+              <button class="button button--secondary" type="button" data-key-copy>Copy</button>
+            </div>
+            <div class="account-table-wrap">
+              <table class="account-table">
+                <thead><tr><th>Location</th><th>Status</th><th>Ping</th><th>Protocols</th></tr></thead>
+                <tbody data-servers-list><tr><td colspan="4">Loading servers...</td></tr></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <section role="tabpanel" id="panel-devices" aria-labelledby="tab-devices" data-account-panel="devices" data-panel="devices" hidden>
+          <article class="account-block" id="devices">
+            <div class="account-block__head"><h2>Connected Devices</h2><strong data-devices-count>0 / 5</strong></div>
+            <div class="portal-status" data-devices-status data-portal-status hidden role="status" aria-live="polite"></div>
+            <div class="account-progress"><div class="account-progress__bar" data-devices-bar style="width:0%"></div></div>
+            <div class="account-table-wrap">
+              <table class="account-table">
+                <thead><tr><th>Device</th><th>Platform</th><th>Last Active</th><th>Action</th></tr></thead>
+                <tbody data-devices-list><tr><td colspan="4">Loading devices...</td></tr></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <section role="tabpanel" id="panel-billing" aria-labelledby="tab-billing" data-account-panel="billing" data-panel="billing" data-billing-ui hidden>
+          <article class="account-block" id="billing" data-billing-ui hidden>
+            <div class="account-block__head"><h2>Billing History</h2></div>
+            <div class="account-table-wrap">
+              <table class="account-table">
+                <thead><tr><th>Date</th><th>Plan</th><th>Amount</th><th>Status</th></tr></thead>
+                <tbody data-billing-list><tr><td colspan="4">Loading payments...</td></tr></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <section role="tabpanel" id="panel-security" aria-labelledby="tab-security" data-account-panel="security" data-panel="security" hidden>
+          <article class="account-block" id="security">
+            <div class="account-block__head"><h2>Security &amp; Support</h2><button class="button button--secondary" type="button" data-logout-all>Revoke All Sessions</button></div>
+            <form class="portal-form" data-password-form novalidate>
+              <div class="portal-status" data-password-status data-portal-status hidden role="status" aria-live="polite"></div>
+              <label class="portal-field"><span>Current Password</span><input type="password" name="current_password" required></label>
+              <label class="portal-field"><span>New Password</span><input type="password" name="password" required minlength="8"></label>
+              <label class="portal-field"><span>Confirm New Password</span><input type="password" name="password_confirmation" required minlength="8"></label>
+              <button class="button button--secondary" type="submit">Update Password</button>
+            </form>
+            <form class="portal-form" data-support-form novalidate>
+              <div class="portal-status" data-support-status data-portal-status hidden role="status" aria-live="polite"></div>
+              <label class="portal-field"><span>Support Subject</span><input type="text" name="subject" required minlength="3"></label>
+              <label class="portal-field"><span>Message</span><textarea name="message" rows="3" required minlength="5"></textarea></label>
+              <button class="button" type="submit">Send Support Request</button>
+            </form>
+          </article>
+        </section>
       </div>
     </div>
   </div>

@@ -1,5 +1,53 @@
 <dialog class="wishlist" data-wishlist aria-labelledby="wishlist-title">
   <button class="dialog-close" type="button" data-wishlist-close aria-label="{{wishlist.close}}" data-i18n-aria-label="wishlist.close">×</button>
-  <h2 id="wishlist-title" data-i18n="wishlist.title">{{wishlist.title}}</h2><p data-i18n="wishlist.description">{{wishlist.description}}</p>
-  {{#if wishlist.telegramUrl}}<a class="button" href="{{wishlist.telegramUrl}}" target="_blank" rel="noopener noreferrer" data-i18n="wishlist.buttonText">{{wishlist.buttonText}}</a>{{else}}<button class="button" type="button" disabled data-i18n="wishlist.buttonText">{{wishlist.buttonText}}</button>{{/if}}
+  <p class="eyebrow" data-plan-dialog-eyebrow>NordelVPN</p>
+  <h2 id="wishlist-title" data-plan-dialog-title data-i18n="wishlist.title">{{wishlist.title}}</h2>
+  <div class="wishlist-summary" data-plan-summary>
+    <div>
+      <strong data-plan-summary-name>Plus</strong>
+      <span class="wishlist-summary__period" data-plan-summary-period>6 months</span>
+    </div>
+    <strong class="wishlist-summary__price" data-plan-summary-price>€25</strong>
+  </div>
+  <form class="wishlist-form" data-plan-dialog-form novalidate>
+    <div class="wishlist-field">
+      <span class="wishlist-field__label" data-plan-switcher-label>Choose plan</span>
+      <div class="wishlist-plans" data-plan-switcher role="radiogroup" aria-label="Choose plan">
+        <label class="wishlist-plan-option">
+          <input type="radio" name="plan_code" value="trial">
+          <span class="wishlist-plan-option__name">Trial</span>
+          <strong class="wishlist-plan-option__price">€0.50</strong>
+        </label>
+        <label class="wishlist-plan-option">
+          <input type="radio" name="plan_code" value="basic">
+          <span class="wishlist-plan-option__name">Basic</span>
+          <strong class="wishlist-plan-option__price">€7</strong>
+        </label>
+        <label class="wishlist-plan-option">
+          <input type="radio" name="plan_code" value="plus" checked>
+          <span class="wishlist-plan-option__name">Plus</span>
+          <strong class="wishlist-plan-option__price">€25</strong>
+        </label>
+        <label class="wishlist-plan-option">
+          <input type="radio" name="plan_code" value="complete">
+          <span class="wishlist-plan-option__name">Complete</span>
+          <strong class="wishlist-plan-option__price">€55</strong>
+        </label>
+      </div>
+    </div>
+    <label class="portal-field wishlist-field">
+      <span data-plan-email-label>Email</span>
+      <input type="email" name="email" required autocomplete="email" placeholder="you@example.com">
+    </label>
+    <p class="portal-field-error" data-field-error="email"></p>
+    <div class="portal-status" data-plan-dialog-status data-portal-status hidden role="status" aria-live="polite"></div>
+    <div class="wishlist-actions">
+      <button class="button" type="button" data-plan-action="register">Create account</button>
+      <button class="button button--secondary" type="button" data-plan-action="wishlist">Add to wishlist</button>
+    </div>
+    <a class="button button--secondary wishlist-tg-link" href="{{#if wishlist.telegramUrl}}{{wishlist.telegramUrl}}{{else}}#{{/if}}" target="_blank" rel="noopener noreferrer" data-plan-dialog-tg hidden>Open Telegram Bot</a>
+    <p class="wishlist-legal">
+      <a href="./terms.html" data-i18n="footer.terms">Terms of Use</a> · <a href="./privacy.html" data-i18n="footer.privacy">Privacy Policy</a>
+    </p>
+  </form>
 </dialog>

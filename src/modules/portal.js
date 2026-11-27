@@ -2,12 +2,43 @@
 'use strict';
 
 var sdkFactory = require('./vpn-portal-sdk');
+var QRCore = require('qrcode/lib/core/qrcode');
+function createQrMatrix(text) {
+  return QRCore.create(text, { errorCorrectionLevel: 'M' }).modules;
+}
 var sdk = sdkFactory.createVpnPortalSdk({ brandSlug: 'nordel' });
 sdkFactory.syncAccountNavLinks(sdk);
 var siteConfigPromise = sdk.getSiteConfig();
-var cachedPlans = [];
+var DEFAULT_PLANS = [
+  { plan_code: 'trial', name: 'Trial', period: '5 days', price_minor: 50 },
+  { plan_code: 'basic', name: 'Basic', period: '1 month', price_minor: 700 },
+  { plan_code: 'plus', name: 'Plus', period: '6 months', price_minor: 2500 },
+  { plan_code: 'complete', name: 'Complete', period: '12 months', price_minor: 5500 }
+];
+var cachedPlans = DEFAULT_PLANS.slice();
+var cachedClientEmail = '';
 var currentSiteConfig = null;
-siteConfigPromise.then(function (cfg) { currentSiteConfig = cfg; });
+function syncNordelWishlistBotUrls(cfg) {
+  if (!cfg || !sdkFactory.isSiteInWishlistMode(cfg)) return;
+  var lang = sdkFactory.getCurrentSiteLanguage();
+  document.querySelectorAll('[data-checkout-plan], [data-wishlist-open]').forEach(function (el) {
+    var planCode = el.getAttribute('data-checkout-plan') || '';
+    el.setAttribute('data-wishlist-bot-url', sdkFactory.buildWishlistBotUrl(cfg, { planCode: planCode, language: lang }));
+  });
+}
+siteConfigPromise.then(function (cfg) {
+  currentSiteConfig = cfg;
+  var isWishlist = sdkFactory.isSiteInWishlistMode(cfg);
+  document.documentElement.dataset.launchMode = isWishlist ? 'wishlist_only' : 'live';
+  if (isWishlist) {
+    var openDlg = document.querySelector('dialog[data-wishlist]');
+    if (openDlg && openDlg.open) openDlg.close();
+    syncNordelWishlistBotUrls(cfg);
+  }
+});
+document.addEventListener('languagechange', function () {
+  if (currentSiteConfig) syncNordelWishlistBotUrls(currentSiteConfig);
+});
 
 function uiMsg() {
   return sdkFactory.getPortalUiMessages();
@@ -38,6 +69,7 @@ function initLandingLiveFeed() {
   if (!pricing) return;
 
   var planFallbackCodes = ['trial', 'basic', 'plus', 'complete'];
+  var domPlans = [];
   pricing.querySelectorAll('.plan').forEach(function (card, idx) {
     var btn = card.querySelector('button');
     var nameEl = card.querySelector('h3');
@@ -45,14 +77,32 @@ function initLandingLiveFeed() {
     if (btn && !btn.getAttribute('data-checkout-plan')) {
       btn.setAttribute('data-checkout-plan', code);
     }
-    cachedPlans.push({ plan_code: code, name: nameEl ? nameEl.textContent.trim() : code });
+    var base = DEFAULT_PLANS.find(function (p) { return p.plan_code === code; }) || {};
+    domPlans.push({
+      plan_code: code,
+      name: (nameEl ? nameEl.textContent.trim() : '') || base.name || code,
+      period: base.period || '',
+      price_minor: typeof base.price_minor === 'number' ? base.price_minor : 0
+    });
   });
+  if (domPlans.length) cachedPlans = domPlans;
 
   if (sdk.mode === 'live') {
     sdk.getPublicPlans().then(function (res) {
       var plans = (res && res.plans) || [];
       if (plans.length) {
-        cachedPlans = plans.map(function (p) { return { plan_code: p.plan_code, name: p.name || p.plan_code }; });
+        cachedPlans = plans.map(function (p) {
+          var base = DEFAULT_PLANS.find(function (d) { return d.plan_code === p.plan_code; }) || {};
+          return {
+            plan_code: p.plan_code,
+            name: p.name || base.name || p.plan_code,
+            period: p.duration_days ? (p.duration_days + ' days') : (base.period || ''),
+            price_minor: typeof p.price_minor === 'number' ? p.price_minor : (base.price_minor || 0)
+          };
+        });
+        if (typeof window.__nordelSyncPlanDialogPrices === 'function') {
+          window.__nordelSyncPlanDialogPrices();
+        }
       }
       var cards = pricing.querySelectorAll('.plan');
       plans.forEach(function (plan, idx) {
@@ -121,15 +171,28 @@ function initLoginForm() {
   });
 }
 
+function findPlanByCode(code) {
+  var clean = String(code || '').trim();
+  return cachedPlans.find(function (p) { return p.plan_code === clean; }) ||
+    DEFAULT_PLANS.find(function (p) { return p.plan_code === clean; }) ||
+    null;
+}
+
 function initRegisterForm() {
   var form = document.querySelector('[data-portal-register]');
   if (!form) return;
   sdkFactory.bindFormValidationClear(form);
-  siteConfigPromise.then(function (cfg) {
-    if (sdkFactory.isSiteInWishlistMode(cfg)) {
-      sdkFactory.mountRegisterWishlistBanner(form, cfg);
-    }
-  });
+  var params = new URLSearchParams(window.location.search || '');
+  var handoff = sdk.consumePlanSelectionHandoff() || {};
+  var selectedPlanCode = String(params.get('plan') || handoff.planCode || '').trim();
+  if (handoff.email && form.email && !form.email.value) {
+    form.email.value = handoff.email;
+  }
+  if (selectedPlanCode) {
+    var planInfo = findPlanByCode(selectedPlanCode) || { plan_code: selectedPlanCode, name: selectedPlanCode };
+    sdkFactory.mountSelectedPlanBanner(form, planInfo);
+  }
+  // TASK-027: Pre-launch / Join Wishlist banner intentionally omitted on create-account.html.
   var statusEl = form.querySelector('[data-portal-status]');
   var submitBtn = form.querySelector('button[type="submit"]');
   form.addEventListener('submit', function (e) {
@@ -155,10 +218,13 @@ function initRegisterForm() {
         email: email,
         password: password,
         password_confirmation: confirm,
-        display_name: form.display_name ? form.display_name.value.trim() : ''
+        display_name: form.display_name ? form.display_name.value.trim() : '',
+        plan_code: selectedPlanCode || undefined
       }).then(function () {
         setStatus(statusEl, 'Account created. Redirecting...', 'success');
-        window.location.href = './account.html';
+        window.location.href = selectedPlanCode
+          ? ('./account.html?plan=' + encodeURIComponent(selectedPlanCode))
+          : './account.html';
       }).catch(function (err) {
         if (err && err.details) sdkFactory.setFieldErrors(form, err.details);
         setStatus(statusEl, sdkFactory.formatPortalApiError(err, 'Registration failed.'), 'error');
@@ -240,80 +306,212 @@ function initCheckoutAction() {
     sdkFactory.initCheckoutReturnPolling(sdk);
   }
 
-  var getProvider = function () { return null; };
-  var pricingSection = document.querySelector('#pricing .container, #pricing');
-  var providerHost = document.querySelector('[data-payment-providers]');
-  siteConfigPromise.then(function (cfg) {
-    if (!sdkFactory.isSiteCheckoutEnabled(cfg)) {
-      if (providerHost) providerHost.hidden = true;
+  var dialog = document.querySelector('dialog[data-wishlist]');
+  var form = dialog && dialog.querySelector('[data-plan-dialog-form]');
+
+  function syncPlanDialogLabels() {
+    if (!dialog) return;
+    var ui = sdkFactory.getWishlistUiText();
+    var titleEl = dialog.querySelector('[data-plan-dialog-title]');
+    var switcherLabel = dialog.querySelector('[data-plan-switcher-label]');
+    var emailLabel = dialog.querySelector('[data-plan-email-label]');
+    var regBtn = dialog.querySelector('[data-plan-action="register"]');
+    var wishBtn = dialog.querySelector('[data-plan-action="wishlist"]');
+    var tgBtn = dialog.querySelector('[data-plan-dialog-tg]');
+    if (titleEl) titleEl.textContent = ui.selectedPlanLabel;
+    if (switcherLabel) switcherLabel.textContent = ui.changePlanLabel;
+    if (emailLabel) emailLabel.textContent = ui.emailLabel;
+    if (regBtn) regBtn.textContent = ui.registerBtn;
+    if (wishBtn) wishBtn.textContent = ui.wishlistBtn;
+    if (tgBtn) tgBtn.textContent = ui.telegramBtn;
+  }
+
+  function updateSummary(planCode) {
+    if (!dialog) return;
+    var plan = findPlanByCode(planCode) || findPlanByCode('plus') || cachedPlans[0];
+    if (!plan) return;
+    var nameEl = dialog.querySelector('[data-plan-summary-name]');
+    var periodEl = dialog.querySelector('[data-plan-summary-period]');
+    var priceEl = dialog.querySelector('[data-plan-summary-price]');
+    if (nameEl) nameEl.textContent = plan.name;
+    if (periodEl) periodEl.textContent = plan.period || '';
+    if (priceEl) priceEl.textContent = formatEur(plan.price_minor);
+    var radio = dialog.querySelector('input[name="plan_code"][value="' + plan.plan_code + '"]');
+    if (radio) radio.checked = true;
+    dialog.querySelectorAll('.wishlist-plan-option').forEach(function (opt) {
+      var input = opt.querySelector('input[name="plan_code"]');
+      var p = input && findPlanByCode(input.value);
+      if (!p) return;
+      var n = opt.querySelector('.wishlist-plan-option__name');
+      var pr = opt.querySelector('.wishlist-plan-option__price');
+      if (n) n.textContent = p.name;
+      if (pr) pr.textContent = formatEur(p.price_minor);
+    });
+  }
+
+  window.__nordelSyncPlanDialogPrices = function () {
+    if (!dialog) return;
+    var checked = dialog.querySelector('input[name="plan_code"]:checked');
+    updateSummary((checked && checked.value) || 'plus');
+  };
+
+  window.__nordelOpenPlanDialog = function (planCode, openerBtn) {
+    if (currentSiteConfig && sdkFactory.isSiteInWishlistMode(currentSiteConfig)) {
+      sdkFactory.openWishlistBot(currentSiteConfig, {
+        planCode: planCode || '',
+        language: sdkFactory.getCurrentSiteLanguage()
+      });
       return;
     }
-    if (pricingSection) {
-      if (!providerHost) {
-        providerHost = document.createElement('div');
-        providerHost.className = 'payment-providers';
-        providerHost.setAttribute('data-payment-providers', '');
-        providerHost.hidden = true;
-        pricingSection.insertBefore(providerHost, pricingSection.firstChild);
+    if (!dialog) return;
+    window.__nordelPlanDialogOpener = openerBtn || null;
+    syncPlanDialogLabels();
+    updateSummary(planCode || 'plus');
+    if (form) {
+      sdkFactory.clearFieldErrors(form);
+      var statusEl = form.querySelector('[data-plan-dialog-status]');
+      sdkFactory.clearPortalStatus(statusEl);
+      var tgLink = form.querySelector('[data-plan-dialog-tg]');
+      if (tgLink) tgLink.hidden = true;
+      if (sdk.isAuthenticated() && form.email && !form.email.value) {
+        if (cachedClientEmail) {
+          form.email.value = cachedClientEmail;
+        } else {
+          sdk.getMe().then(function (me) {
+            if (me && me.client && me.client.email && !form.email.value) {
+              cachedClientEmail = me.client.email;
+              form.email.value = cachedClientEmail;
+            }
+          }).catch(function () {});
+        }
       }
-      sdkFactory.mountPaymentProviderSelector(sdk, providerHost).then(function (getter) {
-        if (typeof getter === 'function') getProvider = getter;
-      });
     }
-  });
+    if (!dialog.open) dialog.showModal();
+  };
+
+  if (dialog && form) {
+    sdkFactory.bindFormValidationClear(form);
+    dialog.querySelectorAll('input[name="plan_code"]').forEach(function (radio) {
+      radio.addEventListener('change', function () {
+        updateSummary(radio.value);
+      });
+    });
+
+    document.addEventListener('languagechange', function () {
+      syncPlanDialogLabels();
+      if (dialog.open) {
+        var checked = dialog.querySelector('input[name="plan_code"]:checked');
+        updateSummary((checked && checked.value) || 'plus');
+      }
+    });
+
+    var getSelectedPlan = function () {
+      var checked = dialog.querySelector('input[name="plan_code"]:checked');
+      return findPlanByCode((checked && checked.value) || 'plus') || DEFAULT_PLANS[2];
+    };
+
+    var regBtn = form.querySelector('[data-plan-action="register"]');
+    var wishBtn = form.querySelector('[data-plan-action="wishlist"]');
+    var statusEl = form.querySelector('[data-plan-dialog-status]');
+    var tgLink = form.querySelector('[data-plan-dialog-tg]');
+
+    var handlePlanSubmit = function (intent, triggerBtn) {
+      sdkFactory.clearFieldErrors(form);
+      var email = form.email ? form.email.value.trim() : '';
+      var ui = sdkFactory.getWishlistUiText();
+      if (!isValidEmail(email)) {
+        sdkFactory.setFieldErrors(form, { email: ui.emailInvalid || uiMsg().invalidEmail });
+        setStatus(statusEl, ui.emailInvalid || uiMsg().invalidEmail, 'error', { scroll: false });
+        return;
+      }
+      var plan = getSelectedPlan();
+      var source = intent === 'register' ? 'plan_dialog_register' : 'plan_dialog_wishlist';
+      var meta = {
+        intent: intent,
+        source_page: 'index',
+        plan_name: plan.name,
+        price_minor: plan.price_minor,
+        currency: 'EUR'
+      };
+
+      if (intent === 'register') {
+        sdkFactory.withFormBusy(form, triggerBtn, function () {
+          var timeout = new Promise(function (resolve) { window.setTimeout(resolve, 1500); });
+          return Promise.race([
+            sdk.joinWishlist({ email: email, planCode: plan.plan_code, source: source, meta: meta }).catch(function () { return null; }),
+            timeout
+          ]).then(function () {
+            if (sdk.isAuthenticated()) {
+              window.location.href = './account.html?plan=' + encodeURIComponent(plan.plan_code);
+              return;
+            }
+            sdk.savePlanSelectionHandoff({ email: email, planCode: plan.plan_code });
+            window.location.href = './create-account.html?plan=' + encodeURIComponent(plan.plan_code);
+          });
+        }, { loadingText: ui.submitting });
+        return;
+      }
+
+      setStatus(statusEl, ui.submitting, 'loading', { scroll: false });
+      sdkFactory.withFormBusy(form, triggerBtn, function () {
+        return sdk.joinWishlist({
+          email: email,
+          planCode: plan.plan_code,
+          source: source,
+          meta: meta
+        }).then(function (res) {
+          var msg = (res && res.already_registered) ? (ui.planUpdated || ui.successExisting) : ui.successNew;
+          setStatus(statusEl, msg, (res && res.already_registered) ? 'info' : 'success', { scroll: false });
+          if (tgLink && currentSiteConfig && currentSiteConfig.wishlist_bot_url) {
+            tgLink.href = currentSiteConfig.wishlist_bot_url;
+            tgLink.hidden = false;
+          }
+        }).catch(function (err) {
+          if (err && err.details) sdkFactory.setFieldErrors(form, err.details);
+          setStatus(statusEl, sdkFactory.formatPortalApiError(err, ui.errorGeneric), 'error', { scroll: false });
+        });
+      }, { loadingText: ui.submitting });
+    };
+
+    if (regBtn) regBtn.addEventListener('click', function () { handlePlanSubmit('register', regBtn); });
+    if (wishBtn) wishBtn.addEventListener('click', function () { handlePlanSubmit('wishlist', wishBtn); });
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      handlePlanSubmit('register', regBtn || wishBtn);
+    });
+  }
 
   document.addEventListener('click', function (e) {
     var btn = e.target && e.target.closest && e.target.closest('[data-checkout-plan], [data-wishlist-open]');
     if (!btn) return;
-    if (currentSiteConfig && !sdkFactory.isSiteCheckoutEnabled(currentSiteConfig)) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      sdkFactory.openWishlistModal(sdk, {
-        siteConfig: currentSiteConfig,
-        planCode: btn.getAttribute('data-checkout-plan') || '',
-        plans: cachedPlans,
-        sourcePage: 'index',
-        variant: 'modal'
-      });
-      return;
-    }
-    if (!btn.hasAttribute('data-checkout-plan') || sdk.mode !== 'live') return;
-    if (!sdk.isAuthenticated()) {
-      window.location.href = './login.html';
-      return;
-    }
     e.preventDefault();
     e.stopImmediatePropagation();
-    var planCode = btn.getAttribute('data-checkout-plan');
-    var returnUrl = new URL('./account.html', window.location.href).href;
-    var cancelUrl = new URL('./index.html?status=cancelled', window.location.href).href;
-    sdk.checkout({
-      plan_code: planCode,
-      provider: getProvider(),
-      return_url: returnUrl,
-      cancel_url: cancelUrl
-    }).then(function (res) {
-      sdkFactory.handleCheckoutResponse(sdk, res);
-    }).catch(function (err) {
-      if (err && (err.code === 'SITE_IN_WISHLIST_MODE' || err.status === 403)) {
-        if (providerHost) providerHost.hidden = true;
-        sdk.getSiteConfig({ force: true }).then(function (cfg) {
-          currentSiteConfig = cfg;
-          sdkFactory.openWishlistModal(sdk, {
-            siteConfig: cfg,
-            planCode: planCode || '',
-            plans: cachedPlans,
-            sourcePage: 'checkout',
-            variant: 'checkout'
-          });
+    var explicitPlan = btn.getAttribute('data-checkout-plan') || '';
+    var openLiveDialog = function () {
+      var livePlan = explicitPlan || 'plus';
+      if (dialog && typeof window.__nordelOpenPlanDialog === 'function') {
+        window.__nordelOpenPlanDialog(livePlan, btn);
+      }
+    };
+    if (currentSiteConfig) {
+      if (sdkFactory.isSiteInWishlistMode(currentSiteConfig)) {
+        sdkFactory.openWishlistBot(currentSiteConfig, {
+          planCode: explicitPlan,
+          language: sdkFactory.getCurrentSiteLanguage()
         });
         return;
       }
-      var banner = document.querySelector('[data-portal-status]');
-      if (banner) {
-        setStatus(banner, (err && err.message) || 'Checkout failed.', true);
+      openLiveDialog();
+      return;
+    }
+    siteConfigPromise.then(function (cfg) {
+      if (sdkFactory.isSiteInWishlistMode(cfg)) {
+        sdkFactory.openWishlistBot(cfg, {
+          planCode: explicitPlan,
+          language: sdkFactory.getCurrentSiteLanguage()
+        });
       } else {
-        window.location.href = './account.html';
+        openLiveDialog();
       }
     });
   }, true);
@@ -329,7 +527,9 @@ function initAccountPage() {
   }
 
   var state = { accessKey: '', revealed: false };
-  var statusEl = root.querySelector('.portal-card > [data-portal-status]') || root.querySelector('[data-portal-status]');
+  var statusEl = root.querySelector('.account-content > [data-portal-status]') || root.querySelector('.portal-card > [data-portal-status]') || root.querySelector('[data-portal-status]');
+
+  var accountTabs = sdkFactory.initAccountTabs(root, { defaultTab: 'profile' });
   var devicesStatusEl = root.querySelector('[data-devices-status]');
   var vpnStatusEl = root.querySelector('[data-vpn-status]');
 
@@ -374,6 +574,8 @@ function initAccountPage() {
     });
   }
 
+  var vpnConnectCtrl = null;
+
   function renderServers(servers) {
     var listEl = root.querySelector('[data-servers-list]');
     if (!listEl) return;
@@ -389,6 +591,14 @@ function initAccountPage() {
       tr.children[1].textContent = sdkFactory.formatServerStatusAndLoad(srv);
       tr.children[2].textContent = srv.ping_ms ? srv.ping_ms + ' ms' : '—';
       tr.children[3].textContent = sdkFactory.formatServerProtocolsAndTags(srv);
+      sdkFactory.appendServerVlessActions(tr.children[3], srv, {
+        statusEl: vpnStatusEl || statusEl,
+        onSelectQr: function (selectedSrv) {
+          if (vpnConnectCtrl && typeof vpnConnectCtrl.selectServerVless === 'function') {
+            vpnConnectCtrl.selectServerVless(selectedSrv);
+          }
+        }
+      });
       listEl.appendChild(tr);
     });
   }
@@ -413,7 +623,7 @@ function initAccountPage() {
   }
 
   function loadAccountData() {
-    return Promise.all([sdk.getMe(), sdk.getSubscription(), sdk.getBillingHistory(), siteConfigPromise]).then(function (results) {
+    return Promise.all([sdk.getMe(), sdk.getSubscription(), Promise.resolve({ payments: [] }), siteConfigPromise]).then(function (results) {
       var me = results[0];
       var subRes = results[1];
       var billRes = results[2];
@@ -428,25 +638,81 @@ function initAccountPage() {
       sdkFactory.revealAuthGate();
       if (client) {
         var nameInput = root.querySelector('[name="display_name"]');
-        var emailEl = root.querySelector('[data-profile-email]');
+        var emailEls = root.querySelectorAll('[data-profile-email]');
         if (nameInput) nameInput.value = client.display_name || '';
-        if (emailEl) emailEl.textContent = client.email;
+        emailEls.forEach(function (el) { el.textContent = client.email; });
       }
 
+      var checkoutForm = root.querySelector('[data-account-checkout-form]');
+      if (checkoutForm && sdkFactory.isSiteCheckoutEnabled(siteCfg)) {
+        checkoutForm.hidden = false;
+        var urlPlan = new URLSearchParams(window.location.search || '').get('plan');
+        var planSelect = checkoutForm.querySelector('[data-account-plan-select]');
+        if (planSelect && urlPlan && planSelect.querySelector('option[value="' + urlPlan + '"]')) {
+          planSelect.value = urlPlan;
+        }
+        var providerHost = checkoutForm.querySelector('[data-payment-providers]');
+        if (providerHost && !checkoutForm.__providersMounted) {
+          checkoutForm.__providersMounted = true;
+          var getAccProvider = function () { return null; };
+          sdkFactory.mountPaymentProviderSelector(sdk, providerHost).then(function (getter) {
+            if (typeof getter === 'function') getAccProvider = getter;
+          });
+          var chkStatus = checkoutForm.querySelector('[data-account-checkout-status]') || statusEl;
+          var chkBtn = checkoutForm.querySelector('button[type="submit"]');
+          checkoutForm.addEventListener('submit', function (ev) {
+            ev.preventDefault();
+            var chosenPlan = (planSelect && planSelect.value) || 'plus';
+            var returnUrl = new URL('./account.html', window.location.href).href;
+            var cancelUrl = new URL('./account.html?status=cancelled', window.location.href).href;
+            setStatus(chkStatus, uiMsg().loading, 'loading', { scroll: false });
+            sdkFactory.withFormBusy(checkoutForm, chkBtn, function () {
+              return sdk.checkout({
+                plan_code: chosenPlan,
+                provider: getAccProvider(),
+                return_url: returnUrl,
+                cancel_url: cancelUrl
+              }).then(function (res) {
+                sdkFactory.handleCheckoutResponse(sdk, res);
+              }).catch(function (err) {
+                setStatus(chkStatus, sdkFactory.formatPortalApiError(err, 'Checkout failed.'), 'error');
+              });
+            });
+          });
+        }
+      }
+
+      var tabVpn = root.querySelector('#tab-vpn-access');
+      var panelVpn = root.querySelector('#panel-vpn-access');
+      var tabDev = root.querySelector('#tab-devices');
+      var panelDev = root.querySelector('#panel-devices');
       if (!serversAllowed) {
-        var vpnAccessBlock = root.querySelector('#vpn-access');
-        var devicesBlock = root.querySelector('#devices');
-        if (vpnAccessBlock) vpnAccessBlock.hidden = true;
-        if (devicesBlock) devicesBlock.hidden = true;
-        sdkFactory.mountAccountWaitlistCard(vpnAccessBlock || root, siteCfg, { className: 'account-block' });
+        if (tabVpn) tabVpn.hidden = true;
+        if (panelVpn) panelVpn.hidden = true;
+        if (tabDev) tabDev.hidden = true;
+        if (panelDev) panelDev.hidden = true;
+        if (accountTabs && typeof accountTabs.refresh === 'function') {
+          accountTabs.refresh();
+        }
+        var accountContent = root.querySelector('.account-content') || root;
+        sdkFactory.mountAccountWaitlistCard(accountContent, siteCfg, { prepend: true, className: 'account-block' });
+      } else {
+        if (tabVpn) tabVpn.hidden = false;
+        if (tabDev) tabDev.hidden = false;
+        if (accountTabs && typeof accountTabs.refresh === 'function') {
+          accountTabs.refresh();
+        }
       }
       if (sub) {
-        var planEl = root.querySelector('[data-sub-plan]');
-        var statusBadge = root.querySelector('[data-sub-status]');
-        var expEl = root.querySelector('[data-sub-expires]');
-        if (planEl) planEl.textContent = sub.plan_name + ' (' + sub.access_tier + ')';
-        if (statusBadge) statusBadge.textContent = sub.status;
-        if (expEl) expEl.textContent = sub.expires_at ? new Date(sub.expires_at).toLocaleDateString() : '—';
+        root.querySelectorAll('[data-sub-plan]').forEach(function (el) {
+          el.textContent = sub.plan_name + ' (' + sub.access_tier + ')';
+        });
+        root.querySelectorAll('[data-sub-status]').forEach(function (el) {
+          el.textContent = sub.status;
+        });
+        root.querySelectorAll('[data-sub-expires]').forEach(function (el) {
+          el.textContent = sub.expires_at ? new Date(sub.expires_at).toLocaleDateString() : '—';
+        });
 
         state.accessKey = sub.access_key || '';
         var keyEl = root.querySelector('[data-vpn-key]');
@@ -454,8 +720,14 @@ function initAccountPage() {
 
         if (state.accessKey && serversAllowed) {
           sdk.getBootstrap(state.accessKey).then(function (boot) {
-            renderServers(boot.servers || []);
+            var connectAnchor = root.querySelector('.account-key-box') || root.querySelector('#vpn-access');
+            vpnConnectCtrl = sdkFactory.mountVpnConnectPanel(connectAnchor, boot, {
+              createQrMatrix: createQrMatrix,
+              placement: 'after'
+            });
+            renderServers((boot && boot.servers) || []);
           }).catch(function (err) {
+            if (vpnConnectCtrl) { vpnConnectCtrl.hide(); vpnConnectCtrl = null; }
             if (err.code === 'KEY_EXPIRED') {
               setStatus(statusEl, uiMsg().keyExpired, 'warning');
             } else if (err.code === 'KEY_REVOKED') {
@@ -469,10 +741,12 @@ function initAccountPage() {
 
           sdk.getDevices(state.accessKey).then(renderDevices).catch(function () { /* ignore */ });
         } else {
+          if (vpnConnectCtrl) { vpnConnectCtrl.hide(); vpnConnectCtrl = null; }
           renderServers([]);
           renderDevices({ limit: 5, devices: [] });
         }
       } else {
+        if (vpnConnectCtrl) { vpnConnectCtrl.hide(); vpnConnectCtrl = null; }
         renderServers([]);
         renderDevices({ limit: 5, devices: [] });
       }
@@ -480,6 +754,7 @@ function initAccountPage() {
       renderBilling(billRes && billRes.payments);
     }).catch(function (err) {
       if (sdk.mode === 'live' && (!sdk.isAuthenticated() || (err && (err.status === 401 || err.code === 'UNAUTHORIZED')))) {
+        sdk.clearSession();
         window.location.replace('./login.html');
         return;
       }
