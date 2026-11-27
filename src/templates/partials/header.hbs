@@ -12,7 +12,15 @@
       <a href="./forgot-password.html" data-guest-only data-i18n="nav.forgotPassword">Forgot password</a>
     </nav>
     <div class="header-actions">
-      <button class="theme-toggle" type="button" data-theme-toggle aria-label="Dark theme" data-i18n-aria-label="theme.dark" aria-pressed="false">☉</button>
+      <button class="theme-toggle" type="button" data-theme-toggle aria-label="Dark theme" data-i18n-aria-label="theme.dark" aria-pressed="false">
+        <svg class="theme-toggle__icon theme-toggle__sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="4"></circle>
+          <path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"></path>
+        </svg>
+        <svg class="theme-toggle__icon theme-toggle__moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <path d="M20.5 14.1A8.5 8.5 0 0 1 9.9 3.5a8.5 8.5 0 1 0 10.6 10.6Z"></path>
+        </svg>
+      </button>
       <label class="language"><span class="sr-only" data-i18n="language.label">Language</span><select data-language-select aria-label="Language" data-i18n-aria-label="language.label"><option value="en" data-i18n="language.name">EN</option></select></label>
       <a class="header-explore" href="./login.html" data-account-link data-auth-only hidden data-i18n="nav.account">Account</a>
       {{#if landing}}<button class="button" type="button" data-wishlist-open><span data-i18n="nav.discover">Discover Nordel</span> <span aria-hidden="true">↗</span></button>{{else}}<a class="button" href="./index.html#pricing"><span data-i18n="nav.discover">Discover Nordel</span> ↗</a>{{/if}}
